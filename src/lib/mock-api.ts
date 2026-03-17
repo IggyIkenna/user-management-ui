@@ -186,7 +186,11 @@ function simulateProvisioning(role: string): ProvisioningStep[] {
   }
   steps.push({ service: "slack", label: "Slack", status: "success" });
   if (role === "admin" || role === "accounting" || role === "operations") {
-    steps.push({ service: "microsoft365", label: "Microsoft 365", status: "success" });
+    steps.push({
+      service: "microsoft365",
+      label: "Microsoft 365",
+      status: "success",
+    });
   }
   if (isDevRole(role)) {
     steps.push({ service: "gcp", label: "GCP IAM", status: "success" });
@@ -199,7 +203,8 @@ function simulateProvisioning(role: string): ProvisioningStep[] {
 
 function buildServices(role: string): Person["services"] {
   const dev = isDevRole(role);
-  const internal = role === "admin" || role === "accounting" || role === "operations";
+  const internal =
+    role === "admin" || role === "accounting" || role === "operations";
   return {
     github: dev ? "provisioned" : "not_applicable",
     slack: "provisioned",
@@ -302,13 +307,37 @@ function handleRoutes(
     return jsonResponse({
       roles: [
         { id: "admin", label: "Admin", description: "Full system access" },
-        { id: "collaborator", label: "Collaborator", description: "Dev collaborator (per-repo GitHub access)" },
+        {
+          id: "collaborator",
+          label: "Collaborator",
+          description: "Dev collaborator (per-repo GitHub access)",
+        },
         { id: "board", label: "Board", description: "Board member" },
-        { id: "client", label: "Client", description: "Product client (portal access per slug)" },
-        { id: "shareholder", label: "Shareholder", description: "Shareholder report access" },
-        { id: "accounting", label: "Accounting", description: "Financial access (M365 + portal)" },
-        { id: "operations", label: "Operations", description: "Ops access (M365 + portal)" },
-        { id: "investor", label: "Investor", description: "Investment decks + doc upload" },
+        {
+          id: "client",
+          label: "Client",
+          description: "Product client (portal access per slug)",
+        },
+        {
+          id: "shareholder",
+          label: "Shareholder",
+          description: "Shareholder report access",
+        },
+        {
+          id: "accounting",
+          label: "Accounting",
+          description: "Financial access (M365 + portal)",
+        },
+        {
+          id: "operations",
+          label: "Operations",
+          description: "Ops access (M365 + portal)",
+        },
+        {
+          id: "investor",
+          label: "Investor",
+          description: "Investment decks + doc upload",
+        },
       ],
     });
   }
@@ -316,15 +345,11 @@ function handleRoutes(
   return null;
 }
 
-async function handle(
-  url: string,
-  init?: RequestInit,
-): Promise<Response> {
+async function handle(url: string, init?: RequestInit): Promise<Response> {
   await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
   const path = url.replace(/^https?:\/\/[^/]+/, "").replace(/\?.*$/, "");
   const method = init?.method?.toUpperCase() || "GET";
-  const body =
-    init?.body && typeof init.body === "string" ? init.body : null;
+  const body = init?.body && typeof init.body === "string" ? init.body : null;
 
   const result = handleRoutes(path, method, body);
   if (result) return result;

@@ -10,7 +10,11 @@ export type UserRole =
 
 export type UserStatus = "active" | "offboarded" | "pending";
 
-export type ProvisioningStatus = "provisioned" | "not_applicable" | "pending" | "failed";
+export type ProvisioningStatus =
+  | "provisioned"
+  | "not_applicable"
+  | "pending"
+  | "failed";
 
 export interface UserServices {
   github: ProvisioningStatus;

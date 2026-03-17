@@ -81,7 +81,8 @@ export default function OnboardUserPage() {
         </h1>
         <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-6 space-y-4">
           <p className="text-sm text-zinc-400">
-            Successfully onboarded <strong className="text-zinc-200">{form.name}</strong> as{" "}
+            Successfully onboarded{" "}
+            <strong className="text-zinc-200">{form.name}</strong> as{" "}
             <strong className="text-zinc-200">{form.role}</strong>
           </p>
           <div className="space-y-2">
