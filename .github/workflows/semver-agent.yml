@@ -1,0 +1,161 @@
+name: Semver Agent
+
+# Computes the next semver for this repo based on diff analysis since last staging_versions
+# baseline, then dispatches a version-bump event to unified-trading-pm with the computed version.
+#
+# TRIGGER: Fires ONLY when the "Quality Gates" workflow passes on the staging branch.
+#
+# Placeholders replaced by rollout-semver-agent.sh:
+#   user-management-ui  — repo name
+#   user_management_ui — underscore form
+#
+# Pre-1.0.0 semver rules:
+#   feat!: / BREAKING CHANGE: -> MINOR bump (never auto-cross to 1.0.0)
+#   feat:                      -> MINOR bump
+#   fix:                       -> PATCH bump
+
+on:
+  workflow_run:
+    workflows: ["Quality Gates"]
+    types: [completed]
+    branches: [staging]
+
+env:
+  GH_TOKEN: ${{ secrets.GH_PAT }}
+  SERVICE_NAME: "user-management-ui"
+  SOURCE_DIR: "user_management_ui"
+  GH_ORG: ${{ github.repository_owner }}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  semver:
+    name: Semver Agent — user-management-ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout repo at staging commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - name: Checkout unified-trading-codex (readiness checklist)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.GH_ORG }}/unified-trading-codex
+          path: ../unified-trading-codex
+          token: ${{ secrets.GH_PAT }}
+          sparse-checkout: |
+            10-audit/
+
+      - name: Compute next semver via diff analysis
+        id: compute
+        run: |
+          set -euo pipefail
+
+          echo "=== Semver Agent: user-management-ui ==="
+          echo "Triggered by Quality Gates passing on staging (SHA: ${{ github.event.workflow_run.head_sha }})"
+
+          # UI repos use package.json for version
+          CURRENT=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+          if [ -z "$CURRENT" ]; then
+            echo "No version found in package.json — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Current version: $CURRENT"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          COMMITS=$(git log --oneline 2>/dev/null || echo "")
+          if [ -z "$COMMITS" ]; then
+            echo "No commits to analyze. Nothing to bump."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP=""
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qE "^[a-f0-9]+ [a-z]+!(\(.+\))?:"; then
+              BUMP="breaking"
+              break
+            elif echo "$msg" | grep -qE "^[a-f0-9]+ feat(\(.+\))?:"; then
+              [ "$BUMP" != "breaking" ] && BUMP="minor"
+            elif echo "$msg" | grep -qE "^[a-f0-9]+ fix(\(.+\))?:"; then
+              [ "$BUMP" != "breaking" ] && [ "$BUMP" != "minor" ] && BUMP="patch"
+            fi
+          done <<< "$COMMITS"
+
+          if [ -z "$BUMP" ]; then
+            echo "No feat:/fix:/breaking commits found. Skipping version bump."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          case "$BUMP" in
+            breaking)
+              if [ "$MAJOR" = "0" ]; then
+                MINOR=$((MINOR + 1)); PATCH=0
+              fi ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Version: $CURRENT -> $NEW_VERSION (bump=$BUMP)"
+
+          IS_BREAKING="false"
+          [ "$BUMP" = "breaking" ] && IS_BREAKING="true"
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "current_version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "is_breaking=$IS_BREAKING" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch version-bump to unified-trading-pm
+        if: steps.compute.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+
+          REPO="user-management-ui"
+          VERSION="${{ steps.compute.outputs.new_version }}"
+          BRANCH="staging"
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          OWNER="${{ github.repository_owner }}"
+          IS_BREAKING="${{ steps.compute.outputs.is_breaking }}"
+
+          HTTP_STATUS=$(curl -s -o /tmp/dispatch_response.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${OWNER}/unified-trading-pm/dispatches" \
+            -d "{\"event_type\": \"version-bump\", \"client_payload\": {\"repo\": \"${REPO}\", \"version\": \"${VERSION}\", \"branch\": \"${BRANCH}\", \"commit_sha\": \"${COMMIT_SHA}\", \"is_breaking\": \"${IS_BREAKING}\"}}")
+
+          if [ "$HTTP_STATUS" = "204" ]; then
+            echo "Dispatched successfully to unified-trading-pm"
+          else
+            echo "ERROR: HTTP $HTTP_STATUS dispatching to unified-trading-pm"
+            cat /tmp/dispatch_response.json || true
+            exit 1
+          fi
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+          STATUS: ${{ job.status }}
+        run: |
+          [ -z "$TELEGRAM_BOT_TOKEN" ] && echo "No bot token — skipping Telegram notify" && exit 0
+          [ -z "$TELEGRAM_CHAT_ID" ] && echo "No chat ID — skipping Telegram notify" && exit 0
+          TEXT="*semver-agent* | user-management-ui | ${STATUS} | branch: staging | triggered by QG pass on staging (pre-SIT)"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode="Markdown" || true

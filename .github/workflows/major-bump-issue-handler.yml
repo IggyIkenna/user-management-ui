@@ -1,0 +1,128 @@
+name: major-bump-issue-handler
+
+# Handles /approve and /reject comments on GitHub Issues with the "major-bump-pending" label.
+#
+# SSOT: unified-trading-pm/scripts/workflow-templates/major-bump-issue-handler.yml
+# Rollout: bash unified-trading-pm/scripts/workflow-templates/rollout-workflow-templates.sh
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  handle-major-bump:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'major-bump-pending')
+    steps:
+      - name: Detect command
+        id: cmd
+        run: |
+          BODY=$(cat << 'BODYEOF'
+          ${{ github.event.comment.body }}
+          BODYEOF
+          )
+          TRIMMED=$(echo "$BODY" | tr '[:upper:]' '[:lower:]' | tr -d ' \t\r\n')
+          if echo "$TRIMMED" | grep -q "^/approve"; then
+            echo "action=approve" >> "$GITHUB_OUTPUT"
+          elif echo "$TRIMMED" | grep -q "^/reject"; then
+            echo "action=reject" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify commenter write access
+        if: steps.cmd.outputs.action != 'none'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          COMMENTER="${{ github.event.comment.user.login }}"
+          REPO="${{ github.event.repository.name }}"
+          ORG="${{ github.repository_owner }}"
+          HTTP_STATUS=$(curl -s -o /tmp/perm.json -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${ORG}/${REPO}/collaborators/${COMMENTER}/permission")
+          PERM=$(python3 -c "import json; d=json.load(open('/tmp/perm.json')); print(d.get('permission','none'))" 2>/dev/null || echo "none")
+          if [[ "$PERM" != "write" && "$PERM" != "maintain" && "$PERM" != "admin" ]]; then
+            echo "ERROR: $COMMENTER has '$PERM' access -- write/maintain/admin required"
+            exit 1
+          fi
+
+      - name: Parse issue metadata
+        if: steps.cmd.outputs.action != 'none'
+        id: meta
+        run: |
+          set -euo pipefail
+          ISSUE_BODY=$(cat << 'ISSUEEOF'
+          ${{ github.event.issue.body }}
+          ISSUEEOF
+          )
+          METADATA=$(echo "$ISSUE_BODY" | python3 -c "
+          import sys, re, json
+          body = sys.stdin.read()
+          m = re.search(r'<!--\s*major-bump-metadata\s*(\{.*?\})\s*-->', body, re.DOTALL)
+          if not m: print('{}')
+          else:
+              try: print(json.dumps(json.loads(m.group(1).strip())))
+              except: print('{}')
+          " 2>/dev/null || echo "{}")
+          REPO=$(echo "$METADATA" | python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('repo',''))" 2>/dev/null || echo "")
+          VERSION=$(echo "$METADATA" | python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('proposed_version',''))" 2>/dev/null || echo "")
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Bump package.json on staging branch
+        if: steps.cmd.outputs.action == 'approve'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          REPO: ${{ steps.meta.outputs.repo }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          APPROVER: ${{ github.event.comment.user.login }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch staging \
+            "https://${GH_TOKEN}@github.com/${ORG}/${REPO}.git" /tmp/target-repo
+          cd /tmp/target-repo
+          node -e "const pkg=require('./package.json'); pkg.version='${VERSION}'; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')"
+          git config user.email "semver-agent@ci.local"
+          git config user.name "Semver Agent (major-bump-issue-handler)"
+          git add package.json
+          git diff --staged --quiet || git commit -m "chore: bump version to ${VERSION} [major-bump approved by ${APPROVER}]"
+          git push origin staging
+
+      - name: Dispatch version-bump to unified-trading-pm
+        if: steps.cmd.outputs.action == 'approve'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          REPO: ${{ steps.meta.outputs.repo }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${ORG}/unified-trading-pm/dispatches" \
+            -d "{\"event_type\":\"version-bump\",\"client_payload\":{\"repo\":\"${REPO}\",\"version\":\"${VERSION}\",\"branch\":\"staging\",\"commit_sha\":\"major-bump-approved\",\"approved_by\":\"${{ github.event.comment.user.login }}\"}}"
+
+      - name: Close issue
+        if: steps.cmd.outputs.action != 'none'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ORG: ${{ github.repository_owner }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_REPO: ${{ github.event.repository.name }}
+        run: |
+          STATE_REASON=$([[ "${{ steps.cmd.outputs.action }}" == "approve" ]] && echo "completed" || echo "not_planned")
+          curl -s -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${ORG}/${ISSUE_REPO}/issues/${ISSUE_NUMBER}" \
+            -d "{\"state\":\"closed\",\"state_reason\":\"${STATE_REASON}\"}" || true
