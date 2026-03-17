@@ -140,6 +140,9 @@ export default function UsersPage() {
                   GCP
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-zinc-400 uppercase">
+                  AWS
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-zinc-400 uppercase">
                   Portal
                 </th>
               </tr>
@@ -176,6 +179,9 @@ export default function UsersPage() {
                     <ServiceBadge status={user.services.gcp} />
                   </td>
                   <td className="px-4 py-3 text-center">
+                    <ServiceBadge status={user.services.aws} />
+                  </td>
+                  <td className="px-4 py-3 text-center">
                     <ServiceBadge status={user.services.portal} />
                   </td>
                 </tr>
@@ -183,7 +189,7 @@ export default function UsersPage() {
               {users.length === 0 && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-8 text-center text-zinc-500"
                   >
                     No users found

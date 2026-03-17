@@ -15,6 +15,7 @@ const MOCK_USERS: Person[] = [
     microsoft_upn: "ikenna@odum-research.com",
     slack_handle: "ikenna",
     gcp_email: "ikenna@odum-research.com",
+    aws_iam_arn: "arn:aws:iam::123456789012:user/ikenna",
     product_slugs: [],
     status: "active",
     provisioned_at: "2025-06-01T00:00:00Z",
@@ -24,6 +25,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "provisioned",
       gcp: "provisioned",
+      aws: "provisioned",
       portal: "provisioned",
     },
   },
@@ -33,6 +35,7 @@ const MOCK_USERS: Person[] = [
     email: "datadodo@github.com",
     role: "collaborator",
     github_handle: "datadodo",
+    slack_handle: "datadodo",
     product_slugs: [],
     status: "active",
     provisioned_at: "2025-09-15T00:00:00Z",
@@ -42,6 +45,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "provisioned",
+      aws: "provisioned",
       portal: "provisioned",
     },
   },
@@ -51,6 +55,7 @@ const MOCK_USERS: Person[] = [
     email: "cosmictrader@github.com",
     role: "collaborator",
     github_handle: "CosmicTrader",
+    slack_handle: "cosmictrader",
     product_slugs: [],
     status: "active",
     provisioned_at: "2025-09-15T00:00:00Z",
@@ -60,6 +65,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "provisioned",
+      aws: "provisioned",
       portal: "provisioned",
     },
   },
@@ -77,6 +83,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "not_applicable",
+      aws: "not_applicable",
       portal: "provisioned",
     },
   },
@@ -86,6 +93,7 @@ const MOCK_USERS: Person[] = [
     email: "sarah@odum-research.com",
     role: "accounting",
     microsoft_upn: "sarah@odum-research.com",
+    slack_handle: "sarah.mbeki",
     product_slugs: [],
     status: "active",
     provisioned_at: "2026-02-01T00:00:00Z",
@@ -95,6 +103,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "provisioned",
       gcp: "not_applicable",
+      aws: "not_applicable",
       portal: "provisioned",
     },
   },
@@ -112,6 +121,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "not_applicable",
+      aws: "not_applicable",
       portal: "provisioned",
     },
   },
@@ -129,6 +139,7 @@ const MOCK_USERS: Person[] = [
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "not_applicable",
+      aws: "not_applicable",
       portal: "provisioned",
     },
   },
@@ -138,6 +149,7 @@ const MOCK_USERS: Person[] = [
     email: "david@odum-research.com",
     role: "operations",
     microsoft_upn: "david@odum-research.com",
+    slack_handle: "david.kim",
     product_slugs: [],
     status: "offboarded",
     provisioned_at: "2025-08-01T00:00:00Z",
@@ -147,6 +159,7 @@ const MOCK_USERS: Person[] = [
       slack: "not_applicable",
       microsoft365: "not_applicable",
       gcp: "not_applicable",
+      aws: "not_applicable",
       portal: "not_applicable",
     },
   },
@@ -161,23 +174,50 @@ function jsonResponse<T>(d: T, s = 200): Response {
   });
 }
 
+function isDevRole(role: string): boolean {
+  return role === "admin" || role === "collaborator";
+}
+
 function simulateProvisioning(role: string): ProvisioningStep[] {
   const steps: ProvisioningStep[] = [];
 
-  if (role === "admin" || role === "collaborator") {
+  if (isDevRole(role)) {
     steps.push({ service: "github", label: "GitHub", status: "success" });
   }
   steps.push({ service: "slack", label: "Slack", status: "success" });
   if (role === "admin" || role === "accounting" || role === "operations") {
     steps.push({ service: "microsoft365", label: "Microsoft 365", status: "success" });
   }
-  if (role === "admin" || role === "collaborator") {
+  if (isDevRole(role)) {
     steps.push({ service: "gcp", label: "GCP IAM", status: "success" });
+    steps.push({ service: "aws", label: "AWS IAM", status: "success" });
   }
   steps.push({ service: "portal", label: "Website Portal", status: "success" });
 
   return steps;
 }
+
+function buildServices(role: string): Person["services"] {
+  const dev = isDevRole(role);
+  const internal = role === "admin" || role === "accounting" || role === "operations";
+  return {
+    github: dev ? "provisioned" : "not_applicable",
+    slack: "provisioned",
+    microsoft365: internal ? "provisioned" : "not_applicable",
+    gcp: dev ? "provisioned" : "not_applicable",
+    aws: dev ? "provisioned" : "not_applicable",
+    portal: "provisioned",
+  };
+}
+
+const OFFBOARDED_SERVICES: Person["services"] = {
+  github: "not_applicable",
+  slack: "not_applicable",
+  microsoft365: "not_applicable",
+  gcp: "not_applicable",
+  aws: "not_applicable",
+  portal: "not_applicable",
+};
 
 function handleRoutes(
   path: string,
@@ -211,22 +251,7 @@ function handleRoutes(
       status: "active",
       provisioned_at: new Date().toISOString(),
       last_modified: new Date().toISOString(),
-      services: {
-        github:
-          req.role === "admin" || req.role === "collaborator"
-            ? "provisioned"
-            : "not_applicable",
-        slack: "provisioned",
-        microsoft365:
-          req.role === "admin" || req.role === "accounting" || req.role === "operations"
-            ? "provisioned"
-            : "not_applicable",
-        gcp:
-          req.role === "admin" || req.role === "collaborator"
-            ? "provisioned"
-            : "not_applicable",
-        portal: "provisioned",
-      },
+      services: buildServices(req.role),
     };
     users = [...users, newUser];
     const steps = simulateProvisioning(req.role);
@@ -241,13 +266,7 @@ function handleRoutes(
             ...u,
             status: "offboarded" as const,
             last_modified: new Date().toISOString(),
-            services: {
-              github: "not_applicable",
-              slack: "not_applicable",
-              microsoft365: "not_applicable",
-              gcp: "not_applicable",
-              portal: "not_applicable",
-            },
+            services: OFFBOARDED_SERVICES,
           }
         : u,
     );
@@ -259,6 +278,7 @@ function handleRoutes(
         { service: "slack", label: "Slack", status: "success" },
         { service: "microsoft365", label: "Microsoft 365", status: "success" },
         { service: "gcp", label: "GCP IAM", status: "success" },
+        { service: "aws", label: "AWS IAM", status: "success" },
         { service: "portal", label: "Website Portal", status: "success" },
       ],
     });

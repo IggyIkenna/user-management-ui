@@ -25,6 +25,7 @@ describe("API Types", () => {
         slack: "provisioned",
         microsoft365: "provisioned",
         gcp: "provisioned",
+        aws: "provisioned",
         portal: "provisioned",
       },
     };
@@ -83,15 +84,16 @@ describe("API Types", () => {
     expect(step.status).toBe("success");
   });
 
-  it("UserServices tracks all 5 services", () => {
+  it("UserServices tracks all 6 services", () => {
     const services: UserServices = {
       github: "provisioned",
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "provisioned",
+      aws: "provisioned",
       portal: "provisioned",
     };
-    expect(Object.keys(services)).toHaveLength(5);
+    expect(Object.keys(services)).toHaveLength(6);
   });
 
   it("Person with optional fields", () => {
@@ -104,6 +106,7 @@ describe("API Types", () => {
       microsoft_upn: "client@m365.com",
       slack_handle: "client-slack",
       gcp_email: "client@gcp.com",
+      aws_iam_arn: "arn:aws:iam::123456789012:user/client",
       product_slugs: ["elysium", "quant-alpha"],
       status: "active",
       provisioned_at: new Date().toISOString(),
@@ -113,6 +116,7 @@ describe("API Types", () => {
         slack: "provisioned",
         microsoft365: "not_applicable",
         gcp: "not_applicable",
+        aws: "not_applicable",
         portal: "provisioned",
       },
     };

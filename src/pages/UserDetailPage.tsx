@@ -158,10 +158,22 @@ export default function UserDetailPage() {
               <span className="text-zinc-200">{user.microsoft_upn}</span>
             </div>
           )}
+          {user.slack_handle && (
+            <div>
+              <span className="text-zinc-500">Slack:</span>{" "}
+              <span className="text-zinc-200">@{user.slack_handle}</span>
+            </div>
+          )}
           {user.gcp_email && (
             <div>
               <span className="text-zinc-500">GCP:</span>{" "}
               <span className="text-zinc-200">{user.gcp_email}</span>
+            </div>
+          )}
+          {user.aws_iam_arn && (
+            <div>
+              <span className="text-zinc-500">AWS:</span>{" "}
+              <span className="text-zinc-200 text-xs break-all">{user.aws_iam_arn}</span>
             </div>
           )}
           {user.product_slugs.length > 0 && (
@@ -197,6 +209,7 @@ export default function UserDetailPage() {
             status={user.services.microsoft365}
           />
           <ServiceRow label="GCP IAM" status={user.services.gcp} />
+          <ServiceRow label="AWS IAM" status={user.services.aws} />
           <ServiceRow label="Website Portal" status={user.services.portal} />
         </div>
 

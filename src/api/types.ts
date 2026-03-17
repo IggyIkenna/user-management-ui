@@ -17,6 +17,7 @@ export interface UserServices {
   slack: ProvisioningStatus;
   microsoft365: ProvisioningStatus;
   gcp: ProvisioningStatus;
+  aws: ProvisioningStatus;
   portal: ProvisioningStatus;
 }
 
@@ -29,6 +30,7 @@ export interface Person {
   microsoft_upn?: string;
   slack_handle?: string;
   gcp_email?: string;
+  aws_iam_arn?: string;
   product_slugs: string[];
   status: UserStatus;
   provisioned_at: string;
