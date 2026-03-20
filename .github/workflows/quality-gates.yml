@@ -8,7 +8,27 @@ on:
 
 jobs:
   quality-gates:
-    uses: IggyIkenna/unified-trading-pm/.github/workflows/ui-quality-gates.yml@live-defi-rollout
-    with:
-      node-version: "22"
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run quality gates
+        env:
+          CI: "true"
+          WORKFLOW_EXECUTION_ENABLED: "false"
+          REAL_PROVIDER_EXECUTION_ENABLED: "false"
+          VITE_SKIP_AUTH: "true"
+        run: npm run quality:gates:ci

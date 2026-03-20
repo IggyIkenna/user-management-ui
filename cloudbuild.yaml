@@ -36,14 +36,32 @@ steps:
       - |
         set -e
         npm ci --prefer-offline 2>/dev/null || npm ci
+        echo "--- Format check ---"
+        npm run format:check
         echo "--- Typecheck ---"
         npm run typecheck 2>/dev/null || npm run type-check
         echo "--- Lint ---"
         npm run lint
-        echo "--- Unit tests ---"
-        npm test
+        echo "--- Unit + integration tests with coverage ---"
+        npm run test:coverage
         echo "=== Quality gates passed ==="
     waitFor: ["-"]
+
+  - name: "mcr.microsoft.com/playwright:v1.58.2-jammy"
+    id: "smoke-tests"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        npm ci --prefer-offline 2>/dev/null || npm ci
+        npm run smoketest
+    env:
+      - "CI=true"
+      - "WORKFLOW_EXECUTION_ENABLED=false"
+      - "REAL_PROVIDER_EXECUTION_ENABLED=false"
+      - "VITE_SKIP_AUTH=true"
+    waitFor: ["quality-gates"]
 
   - name: "gcr.io/cloud-builders/gcloud"
     id: "configure-docker"
@@ -79,7 +97,7 @@ steps:
       - "-t"
       - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
       - "."
-    waitFor: ["quality-gates", "ensure-repo", "configure-docker"]
+    waitFor: ["quality-gates", "smoke-tests", "ensure-repo", "configure-docker"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "push"

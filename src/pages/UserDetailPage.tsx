@@ -5,11 +5,17 @@ import {
   CheckCircle,
   XCircle,
   MinusCircle,
-  UserX,
+  Pencil,
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import type { Person, ProvisioningStatus } from "@/api/types";
+import type { ProvisioningStatus } from "@/api/types";
+import {
+  getUser,
+  getWorkflowExecutionStatus,
+  listUserWorkflowRuns,
+  reprovisionUser,
+} from "@/api/users";
 
 function ServiceRow({
   label,
@@ -54,48 +60,42 @@ export default function UserDetailPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["user", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/users/${id}`);
-      return res.json() as Promise<{ user: Person }>;
-    },
+    queryFn: () => getUser(id || ""),
     enabled: !!id,
   });
 
-  const offboard = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/v1/users/${id}/offboard`, {
-        method: "POST",
-      });
-      return res.json();
+  const { data: workflowData } = useQuery({
+    queryKey: ["user-workflows", id],
+    queryFn: async () => {
+      const runs = await listUserWorkflowRuns(id || "");
+      const hydrated = await Promise.all(
+        (runs.data.runs || []).slice(0, 5).map(async (run) => {
+          try {
+            const exec = await getWorkflowExecutionStatus(run.execution_name);
+            return {
+              ...run,
+              live_state: exec.data.execution.state || run.status,
+            };
+          } catch {
+            return { ...run, live_state: run.status };
+          }
+        }),
+      );
+      return hydrated;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      queryClient.invalidateQueries({ queryKey: ["user", id] });
-    },
+    enabled: !!id,
+    refetchInterval: 10000,
   });
 
   const reprovision = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/v1/users/onboard`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: user?.name,
-          email: user?.email,
-          role: user?.role,
-          github_handle: user?.github_handle,
-          product_slugs: user?.product_slugs,
-        }),
-      });
-      return res.json();
-    },
+    mutationFn: async () => reprovisionUser(id || ""),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["user", id] });
     },
   });
 
-  const user = data?.user;
+  const user = data?.data.user;
 
   if (isLoading) {
     return (
@@ -173,6 +173,10 @@ export default function UserDetailPage() {
             </div>
           )}
           <div>
+            <span className="text-zinc-500">Firebase UID:</span>{" "}
+            <span className="text-zinc-200">{user.firebase_uid}</span>
+          </div>
+          <div>
             <span className="text-zinc-500">Provisioned:</span>{" "}
             <span className="text-zinc-200">
               {new Date(user.provisioned_at).toLocaleDateString()}
@@ -197,11 +201,53 @@ export default function UserDetailPage() {
             status={user.services.microsoft365}
           />
           <ServiceRow label="GCP IAM" status={user.services.gcp} />
+          <ServiceRow label="AWS IAM" status={user.services.aws} />
           <ServiceRow label="Website Portal" status={user.services.portal} />
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+            Workflow Runs
+          </h2>
+          {(workflowData || []).length === 0 ? (
+            <div className="rounded-lg bg-zinc-800/50 px-4 py-3 text-sm text-zinc-500">
+              No recent runs
+            </div>
+          ) : (
+            (workflowData || []).map((run) => (
+              <div
+                key={run.id}
+                className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-4 py-3 text-sm"
+              >
+                <div>
+                  <p className="text-zinc-200">{run.run_type}</p>
+                  <p className="text-xs text-zinc-500">{run.execution_name}</p>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    run.live_state === "SUCCEEDED"
+                      ? "bg-green-500/20 text-green-300"
+                      : run.live_state === "FAILED"
+                        ? "bg-red-500/20 text-red-300"
+                        : "bg-yellow-500/20 text-yellow-300"
+                  }`}
+                >
+                  {run.live_state}
+                </span>
+              </div>
+            ))
+          )}
         </div>
 
         {user.status === "active" && (
           <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => navigate(`/users/${user.id}/modify`)}
+              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-600 transition-colors"
+            >
+              <Pencil size={16} />
+              Modify
+            </button>
             <button
               onClick={() => reprovision.mutate()}
               disabled={reprovision.isPending}
@@ -215,23 +261,10 @@ export default function UserDetailPage() {
               Re-provision
             </button>
             <button
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Offboard ${user.name}? This will revoke all service access.`,
-                  )
-                ) {
-                  offboard.mutate();
-                }
-              }}
-              disabled={offboard.isPending}
+              onClick={() => navigate(`/users/${user.id}/offboard`)}
               className="flex items-center gap-2 rounded-lg bg-red-600/20 px-4 py-2 text-sm text-red-400 hover:bg-red-600/30 disabled:opacity-50 transition-colors"
             >
-              {offboard.isPending ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <UserX size={16} />
-              )}
+              <MinusCircle size={16} />
               Offboard
             </button>
           </div>

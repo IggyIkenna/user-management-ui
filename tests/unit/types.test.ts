@@ -13,6 +13,7 @@ describe("API Types", () => {
   it("Person type accepts valid data", () => {
     const person: Person = {
       id: "usr-001",
+      firebase_uid: "fb-001",
       name: "Test User",
       email: "test@example.com",
       role: "admin",
@@ -25,6 +26,7 @@ describe("API Types", () => {
         slack: "provisioned",
         microsoft365: "provisioned",
         gcp: "provisioned",
+        aws: "provisioned",
         portal: "provisioned",
       },
     };
@@ -83,20 +85,22 @@ describe("API Types", () => {
     expect(step.status).toBe("success");
   });
 
-  it("UserServices tracks all 5 services", () => {
+  it("UserServices tracks all 6 services", () => {
     const services: UserServices = {
       github: "provisioned",
       slack: "provisioned",
       microsoft365: "not_applicable",
       gcp: "provisioned",
+      aws: "provisioned",
       portal: "provisioned",
     };
-    expect(Object.keys(services)).toHaveLength(5);
+    expect(Object.keys(services)).toHaveLength(6);
   });
 
   it("Person with optional fields", () => {
     const person: Person = {
       id: "usr-002",
+      firebase_uid: "fb-002",
       name: "Client User",
       email: "client@example.com",
       role: "client",
@@ -113,6 +117,7 @@ describe("API Types", () => {
         slack: "provisioned",
         microsoft365: "not_applicable",
         gcp: "not_applicable",
+        aws: "not_applicable",
         portal: "provisioned",
       },
     };

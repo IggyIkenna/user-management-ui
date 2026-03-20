@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import type { OnboardRequest, UserRole, ProvisioningStep } from "@/api/types";
+import { checkOnboardQuota, onboardUser } from "@/api/users";
+import { listAccessTemplates } from "@/api/accessTemplates";
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -30,22 +32,28 @@ export default function OnboardUserPage() {
   });
 
   const [steps, setSteps] = useState<ProvisioningStep[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: templatesData } = useQuery({
+    queryKey: ["access-templates"],
+    queryFn: listAccessTemplates,
+  });
 
   const onboard = useMutation({
     mutationFn: async (req: OnboardRequest) => {
-      const res = await fetch("/api/v1/users/onboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req),
-      });
-      return res.json() as Promise<{
-        user: unknown;
-        provisioning_steps: ProvisioningStep[];
-      }>;
+      const quotaResult = await checkOnboardQuota({ email: req.email, role: req.role });
+      if (!quotaResult.data.quota.ok) {
+        throw new Error(quotaResult.data.quota.message || "Quota exhausted.");
+      }
+      return onboardUser(req);
     },
     onSuccess: (data) => {
-      setSteps(data.provisioning_steps);
+      setError(null);
+      setSteps(data.data.provisioning_steps);
       queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
     },
   });
 
@@ -61,6 +69,7 @@ export default function OnboardUserPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
+    setError(null);
     onboard.mutate(form);
   }
 
@@ -118,6 +127,11 @@ export default function OnboardUserPage() {
       <h1 className="text-xl font-semibold text-zinc-100">Onboard New User</h1>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-zinc-400 mb-1">
             Full Name
@@ -203,6 +217,29 @@ export default function OnboardUserPage() {
             </div>
           </div>
         )}
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-400 mb-1">
+            Access Template (optional)
+          </label>
+          <select
+            value={form.access_template_id || ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                access_template_id: e.target.value || undefined,
+              })
+            }
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-2 text-sm text-zinc-200 focus:border-amber-600 focus:outline-none"
+          >
+            <option value="">No template</option>
+            {(templatesData?.data.templates || []).map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <button
           type="submit"

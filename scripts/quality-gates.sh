@@ -1,26 +1,46 @@
 #!/usr/bin/env bash
-# Quality Gates Stub — TypeScript/React UI
-# SSOT: unified-trading-codex/06-coding-standards/quality-gates-ui-template.sh
-#
-# Rolled out via: python3 unified-trading-pm/scripts/propagation/rollout-quality-gates-unified.py
-# Do NOT edit per-repo — edit base-ui.sh in PM and re-run rollout to propagate.
-# Gate logic lives in: unified-trading-pm/scripts/quality-gates-base/base-ui.sh
-#
-# Usage:
-#   bash scripts/quality-gates.sh           # Full: typecheck + lint + tests + build
-#   bash scripts/quality-gates.sh --test    # Typecheck + tests only (skip lint + build)
-#   bash scripts/quality-gates.sh --lint    # Typecheck + lint only (skip tests + build)
-#   bash scripts/quality-gates.sh --quick   # Typecheck + lint only (skip tests + build)
-#   bash scripts/quality-gates.sh --no-fix  # Same as full (no-op flag; kept for compatibility)
-#
-EXPECTED_BASE_VERSION="1.0"
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$(git rev-parse --show-toplevel)/.." && pwd)}"
-BASE_UI="${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-ui.sh"
+set -euo pipefail
 
-if [[ ! -f "$BASE_UI" ]]; then
-  echo "❌ Cannot find base-ui.sh at: $BASE_UI" >&2
-  echo "   Ensure unified-trading-pm is cloned at the workspace root." >&2
-  exit 1
+CI_MODE=false
+RUN_SMOKE=true
+
+for arg in "$@"; do
+  case "$arg" in
+    --ci)
+      CI_MODE=true
+      ;;
+    --no-smoke)
+      RUN_SMOKE=false
+      ;;
+  esac
+done
+
+echo "=== Quality Gates (user-management-ui) ==="
+echo "--- Format check ---"
+npm run format:check
+
+echo "--- Typecheck ---"
+npm run typecheck 2>/dev/null || npm run type-check
+
+echo "--- Lint ---"
+npm run lint
+
+echo "--- Unit + integration tests with coverage ---"
+npm run test:coverage
+
+if [[ "$RUN_SMOKE" == "true" ]]; then
+  if [[ "${SKIP_SMOKE_TESTS:-false}" == "true" ]]; then
+    echo "--- Playwright smoke tests skipped (SKIP_SMOKE_TESTS=true) ---"
+    echo "=== Quality gates passed ==="
+    exit 0
+  fi
+  echo "--- Playwright smoke tests ---"
+  if [[ "$CI_MODE" == "true" ]]; then
+    npx playwright install --with-deps chromium
+    npm run smoketest
+  else
+    npm run smoketest-no-compile
+  fi
 fi
 
-source "$BASE_UI" "$@"
+echo "=== Quality gates passed ==="

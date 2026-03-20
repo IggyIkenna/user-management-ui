@@ -14,11 +14,25 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5184",
-    reuseExistingServer: true,
-    timeout: 120 * 1000,
-    env: { VITE_MOCK_API: "true" },
-  },
+  webServer: [
+    {
+      command: "npm run server:dev",
+      url: "http://localhost:8017/health",
+      reuseExistingServer: true,
+      timeout: 120 * 1000,
+      env: {
+        WORKFLOW_EXECUTION_ENABLED: "false",
+        REAL_PROVIDER_EXECUTION_ENABLED: "false",
+      },
+    },
+    {
+      command: "npm run dev",
+      url: "http://localhost:5184",
+      reuseExistingServer: true,
+      timeout: 120 * 1000,
+      env: {
+        VITE_SKIP_AUTH: "true",
+      },
+    },
+  ],
 });
