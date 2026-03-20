@@ -5,6 +5,7 @@ import type { Person } from "@/api/types";
 const MOCK_USERS: Person[] = [
   {
     id: "usr-001",
+    firebase_uid: "fb-001",
     name: "Ikenna Igboaka",
     email: "ikenna@odum-research.com",
     role: "admin",
@@ -24,6 +25,7 @@ const MOCK_USERS: Person[] = [
   },
   {
     id: "usr-002",
+    firebase_uid: "fb-002",
     name: "datadodo",
     email: "datadodo@github.com",
     role: "collaborator",
@@ -43,6 +45,7 @@ const MOCK_USERS: Person[] = [
   },
   {
     id: "usr-003",
+    firebase_uid: "fb-003",
     name: "David Kim",
     email: "david@odum-research.com",
     role: "operations",

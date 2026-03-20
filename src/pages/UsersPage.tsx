@@ -3,21 +3,55 @@ import { useNavigate } from "react-router-dom";
 import {
   Search,
   UserPlus,
+  Layers,
   CheckCircle,
   XCircle,
   MinusCircle,
 } from "lucide-react";
 import { useUserStore } from "@/stores/userStore";
-import type { Person, ProvisioningStatus } from "@/api/types";
+import type { Person, ProvisioningStatus, UserServices } from "@/api/types";
+import { listUsers } from "@/api/users";
 
-function ServiceBadge({ status }: { status: ProvisioningStatus }) {
-  if (status === "provisioned")
-    return <CheckCircle size={14} className="text-green-400" />;
-  if (status === "not_applicable")
-    return <MinusCircle size={14} className="text-zinc-600" />;
-  if (status === "failed")
-    return <XCircle size={14} className="text-red-400" />;
-  return <MinusCircle size={14} className="text-yellow-400" />;
+function ServiceBadge({
+  status,
+  reason,
+}: {
+  status: ProvisioningStatus;
+  reason?: string;
+}) {
+  const icon =
+    status === "provisioned" ? (
+      <CheckCircle size={14} className="text-green-400" />
+    ) : status === "not_applicable" ? (
+      <MinusCircle size={14} className="text-zinc-600" />
+    ) : status === "failed" ? (
+      <XCircle size={14} className="text-red-400" />
+    ) : (
+      <MinusCircle size={14} className="text-yellow-400" />
+    );
+  return <span title={reason}>{icon}</span>;
+}
+
+function ServiceCell({
+  user,
+  keyName,
+}: {
+  user: Person;
+  keyName: keyof UserServices;
+}) {
+  const reason =
+    user.service_messages?.[keyName] ||
+    (user.services[keyName] === "failed" ? user.workflow_failure_reason : undefined);
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <ServiceBadge status={user.services[keyName]} reason={reason} />
+      {user.services[keyName] === "failed" && reason && (
+        <span className="max-w-20 truncate text-[10px] text-red-300" title={reason}>
+          {reason}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function StatusBadge({ status }: { status: Person["status"] }) {
@@ -42,25 +76,31 @@ export default function UsersPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
-    queryFn: async () => {
-      const res = await fetch("/api/v1/users");
-      return res.json() as Promise<{ users: Person[]; total: number }>;
-    },
+    queryFn: listUsers,
   });
 
-  const users = data?.users ? filterUsers(data.users) : [];
+  const users = data?.data.users ? filterUsers(data.data.users) : [];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-zinc-100">Users</h1>
-        <button
-          onClick={() => navigate("/onboard")}
-          className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 transition-colors"
-        >
-          <UserPlus size={16} />
-          Onboard User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/templates")}
+            className="flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-600 transition-colors"
+          >
+            <Layers size={16} />
+            Templates
+          </button>
+          <button
+            onClick={() => navigate("/onboard")}
+            className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 transition-colors"
+          >
+            <UserPlus size={16} />
+            Onboard User
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -165,22 +205,22 @@ export default function UsersPage() {
                     <StatusBadge status={user.status} />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <ServiceBadge status={user.services.github} />
+                    <ServiceCell user={user} keyName="github" />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <ServiceBadge status={user.services.slack} />
+                    <ServiceCell user={user} keyName="slack" />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <ServiceBadge status={user.services.microsoft365} />
+                    <ServiceCell user={user} keyName="microsoft365" />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <ServiceBadge status={user.services.gcp} />
+                    <ServiceCell user={user} keyName="gcp" />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <ServiceBadge status={user.services.aws} />
+                    <ServiceCell user={user} keyName="aws" />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <ServiceBadge status={user.services.portal} />
+                    <ServiceCell user={user} keyName="portal" />
                   </td>
                 </tr>
               ))}
