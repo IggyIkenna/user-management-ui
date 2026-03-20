@@ -9,8 +9,11 @@ export type UserRole =
   | "investor";
 
 export type UserStatus = "active" | "offboarded" | "pending";
-
-export type ProvisioningStatus = "provisioned" | "not_applicable" | "pending" | "failed";
+export type ProvisioningStatus =
+  | "provisioned"
+  | "not_applicable"
+  | "pending"
+  | "failed";
 export type OffboardAction = "deactivate" | "delete";
 
 export interface UserServices {
@@ -32,6 +35,7 @@ export interface Person {
   microsoft_upn?: string;
   slack_handle?: string;
   gcp_email?: string;
+  aws_iam_arn?: string;
   product_slugs: string[];
   access_template_id?: string;
   access_template?: AccessTemplate | null;

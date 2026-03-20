@@ -108,6 +108,7 @@ describe("API Types", () => {
       microsoft_upn: "client@m365.com",
       slack_handle: "client-slack",
       gcp_email: "client@gcp.com",
+      aws_iam_arn: "arn:aws:iam::123456789012:user/client",
       product_slugs: ["elysium", "quant-alpha"],
       status: "active",
       provisioned_at: new Date().toISOString(),

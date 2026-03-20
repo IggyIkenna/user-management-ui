@@ -122,9 +122,7 @@ export default function UserDetailPage() {
       <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-6 space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-zinc-100">
-              {user.name}
-            </h1>
+            <h1 className="text-xl font-semibold text-zinc-100">{user.name}</h1>
             <p className="text-sm text-zinc-400">{user.email}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -158,10 +156,24 @@ export default function UserDetailPage() {
               <span className="text-zinc-200">{user.microsoft_upn}</span>
             </div>
           )}
+          {user.slack_handle && (
+            <div>
+              <span className="text-zinc-500">Slack:</span>{" "}
+              <span className="text-zinc-200">@{user.slack_handle}</span>
+            </div>
+          )}
           {user.gcp_email && (
             <div>
               <span className="text-zinc-500">GCP:</span>{" "}
               <span className="text-zinc-200">{user.gcp_email}</span>
+            </div>
+          )}
+          {user.aws_iam_arn && (
+            <div>
+              <span className="text-zinc-500">AWS:</span>{" "}
+              <span className="text-zinc-200 text-xs break-all">
+                {user.aws_iam_arn}
+              </span>
             </div>
           )}
           {user.product_slugs.length > 0 && (

@@ -119,9 +119,7 @@ export default function UsersPage() {
         </div>
         <select
           value={filters.role}
-          onChange={(e) =>
-            setRoleFilter(e.target.value as typeof filters.role)
-          }
+          onChange={(e) => setRoleFilter(e.target.value as typeof filters.role)}
           className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2 text-sm text-zinc-200 focus:border-amber-600 focus:outline-none"
         >
           <option value="all">All Roles</option>

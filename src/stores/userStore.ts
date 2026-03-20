@@ -43,8 +43,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
         !filters.search ||
         user.name.toLowerCase().includes(filters.search.toLowerCase()) ||
         user.email.toLowerCase().includes(filters.search.toLowerCase());
-      const matchesRole =
-        filters.role === "all" || user.role === filters.role;
+      const matchesRole = filters.role === "all" || user.role === filters.role;
       const matchesStatus =
         filters.status === "all" || user.status === filters.status;
       return matchesSearch && matchesRole && matchesStatus;
