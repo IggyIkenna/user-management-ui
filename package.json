@@ -1,7 +1,7 @@
 {
   "name": "user-management-ui",
   "version": "0.1.0",
-  "description": "User lifecycle management — onboard, modify, off-board with one click. Provisions GitHub, Slack, M365, GCP, and portal access per role.",
+  "description": "User lifecycle management \u2014 onboard, modify, off-board with one click. Provisions GitHub, Slack, M365, GCP, and portal access per role.",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -61,7 +61,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^5.0.0",
