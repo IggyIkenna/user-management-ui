@@ -287,5 +287,32 @@
       "admin": ["*"],
       "owner": ["*"]
     }
+  },
+  {
+    "app_id": "unified-trading-system-ui",
+    "capabilities": [
+      { "key": "dashboard.view", "label": "View dashboard & service hub", "category": "view" },
+      { "key": "data.view", "label": "View market data & instruments", "category": "view" },
+      { "key": "data.subscribe", "label": "Subscribe to data feeds", "category": "control" },
+      { "key": "trading.view", "label": "View positions, orders, P&L", "category": "view" },
+      { "key": "trading.execute", "label": "Place orders & manage positions", "category": "control" },
+      { "key": "risk.view", "label": "View risk dashboard & alerts", "category": "view" },
+      { "key": "risk.manage", "label": "Manage risk limits & alerts", "category": "control" },
+      { "key": "research.view", "label": "View strategies, backtests, ML models", "category": "view" },
+      { "key": "research.run", "label": "Run backtests & training jobs", "category": "control" },
+      { "key": "execution.view", "label": "View execution analytics & TCA", "category": "view" },
+      { "key": "reports.view", "label": "View reports & executive dashboard", "category": "view" },
+      { "key": "reports.export", "label": "Export reports", "category": "control" },
+      { "key": "manage.view", "label": "View clients, mandates, fees", "category": "view" },
+      { "key": "manage.edit", "label": "Edit clients, mandates, fees", "category": "control" },
+      { "key": "ops.view", "label": "View ops, admin, devops pages", "category": "view" },
+      { "key": "ops.control", "label": "Trigger deployments, restart services", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["dashboard.view", "data.view", "trading.view", "risk.view", "research.view", "execution.view", "reports.view"],
+      "editor": ["dashboard.view", "data.view", "data.subscribe", "trading.view", "trading.execute", "risk.view", "risk.manage", "research.view", "research.run", "execution.view", "reports.view", "reports.export", "manage.view"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
   }
 ]
