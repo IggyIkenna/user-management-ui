@@ -37,11 +37,13 @@ function roleNeedsCloud(role) {
 }
 
 function getTemplate(profile) {
-  return profile.access_template || {
-    aws_permission_sets: [],
-    slack_channels: [],
-    github_teams: [],
-  };
+  return (
+    profile.access_template || {
+      aws_permission_sets: [],
+      slack_channels: [],
+      github_teams: [],
+    }
+  );
 }
 
 function ok(service, label, message) {
@@ -53,7 +55,12 @@ function fail(service, label, message) {
 }
 
 function na(service, label, message) {
-  return { service, label, status: "success", message: message || "not applicable" };
+  return {
+    service,
+    label,
+    status: "success",
+    message: message || "not applicable",
+  };
 }
 
 function buildAwsClientConfig(secrets) {
@@ -78,8 +85,10 @@ function isAwsBreakglassEnabled() {
 }
 
 async function resolveGcpProjectId() {
-  if (process.env.GCP_TARGET_PROJECT_ID) return process.env.GCP_TARGET_PROJECT_ID;
-  if (process.env.GOOGLE_CLOUD_PROJECT_ID) return process.env.GOOGLE_CLOUD_PROJECT_ID;
+  if (process.env.GCP_TARGET_PROJECT_ID)
+    return process.env.GCP_TARGET_PROJECT_ID;
+  if (process.env.GOOGLE_CLOUD_PROJECT_ID)
+    return process.env.GOOGLE_CLOUD_PROJECT_ID;
   try {
     return await googleAuth.getProjectId();
   } catch {
@@ -89,7 +98,8 @@ async function resolveGcpProjectId() {
 
 async function provisionGitHub(profile, secrets) {
   const template = getTemplate(profile);
-  const needsGitHub = roleNeedsGithub(profile.role) || template.github_teams.length > 0;
+  const needsGitHub =
+    roleNeedsGithub(profile.role) || template.github_teams.length > 0;
   if (!needsGitHub) {
     return na("github", "GitHub");
   }
@@ -148,24 +158,36 @@ async function provisionGitHub(profile, secrets) {
 
 async function provisionSlack(profile, secrets) {
   const template = getTemplate(profile);
-  const needsSlack = roleNeedsSlack(profile.role) || template.slack_channels.length > 0;
+  const needsSlack =
+    roleNeedsSlack(profile.role) || template.slack_channels.length > 0;
   if (!needsSlack) {
     return na("slack", "Slack");
   }
   if (!secrets.slackScimToken) {
-    return fail("slack", "Slack", "Missing Slack SCIM token (set SLACK_SCIM_TOKEN or SECRET_REF_SLACK_SCIM_TOKEN).");
+    return fail(
+      "slack",
+      "Slack",
+      "Missing Slack SCIM token (set SLACK_SCIM_TOKEN or SECRET_REF_SLACK_SCIM_TOKEN).",
+    );
   }
   const scimHeaders = {
     Authorization: `Bearer ${secrets.slackScimToken}`,
     "Content-Type": "application/json",
   };
   const filter = encodeURIComponent(`email eq "${profile.email}"`);
-  const lookupRes = await fetch(`https://api.slack.com/scim/v1/Users?filter=${filter}`, {
-    method: "GET",
-    headers: scimHeaders,
-  });
+  const lookupRes = await fetch(
+    `https://api.slack.com/scim/v1/Users?filter=${filter}`,
+    {
+      method: "GET",
+      headers: scimHeaders,
+    },
+  );
   if (!lookupRes.ok) {
-    return fail("slack", "Slack", `Slack SCIM lookup failed: ${await lookupRes.text()}`);
+    return fail(
+      "slack",
+      "Slack",
+      `Slack SCIM lookup failed: ${await lookupRes.text()}`,
+    );
   }
   const lookupBody = await lookupRes.json();
   const existingUser =
@@ -188,24 +210,35 @@ async function provisionSlack(profile, secrets) {
       body: JSON.stringify(createPayload),
     });
     if (!createRes.ok) {
-      return fail("slack", "Slack", `Slack SCIM create failed: ${await createRes.text()}`);
+      return fail(
+        "slack",
+        "Slack",
+        `Slack SCIM create failed: ${await createRes.text()}`,
+      );
     }
   } else if (!existingUser.active) {
-    const patchRes = await fetch(`https://api.slack.com/scim/v1/Users/${existingUser.id}`, {
-      method: "PATCH",
-      headers: scimHeaders,
-      body: JSON.stringify({
-        Operations: [
-          {
-            op: "Replace",
-            path: "active",
-            value: true,
-          },
-        ],
-      }),
-    });
+    const patchRes = await fetch(
+      `https://api.slack.com/scim/v1/Users/${existingUser.id}`,
+      {
+        method: "PATCH",
+        headers: scimHeaders,
+        body: JSON.stringify({
+          Operations: [
+            {
+              op: "Replace",
+              path: "active",
+              value: true,
+            },
+          ],
+        }),
+      },
+    );
     if (!patchRes.ok) {
-      return fail("slack", "Slack", `Slack SCIM activate failed: ${await patchRes.text()}`);
+      return fail(
+        "slack",
+        "Slack",
+        `Slack SCIM activate failed: ${await patchRes.text()}`,
+      );
     }
   }
   if (template.slack_channels.length > 0) {
@@ -254,7 +287,11 @@ async function provisionSlack(profile, secrets) {
       }
     }
   }
-  return ok("slack", "Slack", "Slack user onboarded via SCIM and channel mappings processed.");
+  return ok(
+    "slack",
+    "Slack",
+    "Slack user onboarded via SCIM and channel mappings processed.",
+  );
 }
 
 async function getMicrosoftGraphToken(secrets) {
@@ -280,10 +317,15 @@ async function provisionM365(profile, secrets) {
   }
   const token = await getMicrosoftGraphToken(secrets);
   if (!token) {
-    return fail("microsoft365", "Microsoft 365", "Missing Microsoft Graph token.");
+    return fail(
+      "microsoft365",
+      "Microsoft 365",
+      "Missing Microsoft Graph token.",
+    );
   }
   const domain = process.env.MS_DEFAULT_DOMAIN || "odum-research.com";
-  const localPart = String(profile.email || "").split("@")[0] || profile.firebase_uid;
+  const localPart =
+    String(profile.email || "").split("@")[0] || profile.firebase_uid;
   const upn = `${localPart}@${domain}`;
   const payload = {
     accountEnabled: true,
@@ -305,9 +347,17 @@ async function provisionM365(profile, secrets) {
   });
   if (!res.ok && res.status !== 409) {
     const body = await res.text();
-    return fail("microsoft365", "Microsoft 365", `Graph user create failed: ${body}`);
+    return fail(
+      "microsoft365",
+      "Microsoft 365",
+      `Graph user create failed: ${body}`,
+    );
   }
-  return ok("microsoft365", "Microsoft 365", "M365 user create/update processed.");
+  return ok(
+    "microsoft365",
+    "Microsoft 365",
+    "M365 user create/update processed.",
+  );
 }
 
 async function provisionGcp(profile) {
@@ -349,7 +399,8 @@ async function provisionGcp(profile) {
 
 async function provisionAws(profile, secrets) {
   const template = getTemplate(profile);
-  const needsAws = roleNeedsCloud(profile.role) || template.aws_permission_sets.length > 0;
+  const needsAws =
+    roleNeedsCloud(profile.role) || template.aws_permission_sets.length > 0;
   if (!needsAws) {
     return na("aws", "AWS IAM");
   }
@@ -388,7 +439,8 @@ async function provisionAws(profile, secrets) {
   );
   const defaultActions =
     profile.role === "admin" ? ["*"] : ["ec2:Describe*", "s3:ListAllMyBuckets"];
-  const policyActions = mappedActions.length > 0 ? mappedActions : defaultActions;
+  const policyActions =
+    mappedActions.length > 0 ? mappedActions : defaultActions;
   const policyDoc = {
     Version: "2012-10-17",
     Statement: [
@@ -417,22 +469,29 @@ async function provisionPortal(profile, secrets) {
   if (!secrets.portalToken || !process.env.PORTAL_API_BASE_URL) {
     return ok("portal", "Portal", "Portal token/API not set; skipped.");
   }
-  const res = await fetch(`${process.env.PORTAL_API_BASE_URL}/users/provision`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secrets.portalToken}`,
-      "Content-Type": "application/json",
+  const res = await fetch(
+    `${process.env.PORTAL_API_BASE_URL}/users/provision`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secrets.portalToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uid: profile.firebase_uid,
+        email: profile.email,
+        role: profile.role,
+        product_slugs: profile.product_slugs || [],
+        status: "active",
+      }),
     },
-    body: JSON.stringify({
-      uid: profile.firebase_uid,
-      email: profile.email,
-      role: profile.role,
-      product_slugs: profile.product_slugs || [],
-      status: "active",
-    }),
-  });
+  );
   if (!res.ok && res.status !== 409) {
-    return fail("portal", "Portal", `Portal provisioning failed: ${await res.text()}`);
+    return fail(
+      "portal",
+      "Portal",
+      `Portal provisioning failed: ${await res.text()}`,
+    );
   }
   return ok("portal", "Portal", "Portal provisioning processed.");
 }
@@ -473,7 +532,11 @@ async function deprovisionGitHub(profile, secrets) {
     },
   );
   if (!res.ok && res.status !== 404) {
-    return fail("github", "GitHub", `GitHub deprovision failed: ${await res.text()}`);
+    return fail(
+      "github",
+      "GitHub",
+      `GitHub deprovision failed: ${await res.text()}`,
+    );
   }
   return ok("github", "GitHub", "GitHub membership removed/deactivated.");
 }
@@ -481,19 +544,30 @@ async function deprovisionGitHub(profile, secrets) {
 async function deprovisionSlack(profile, secrets) {
   const template = getTemplate(profile);
   if (!secrets.slackScimToken) {
-    return fail("slack", "Slack", "Missing Slack SCIM token (set SLACK_SCIM_TOKEN or SECRET_REF_SLACK_SCIM_TOKEN).");
+    return fail(
+      "slack",
+      "Slack",
+      "Missing Slack SCIM token (set SLACK_SCIM_TOKEN or SECRET_REF_SLACK_SCIM_TOKEN).",
+    );
   }
   const scimHeaders = {
     Authorization: `Bearer ${secrets.slackScimToken}`,
     "Content-Type": "application/json",
   };
   const filter = encodeURIComponent(`email eq "${profile.email}"`);
-  const lookupRes = await fetch(`https://api.slack.com/scim/v1/Users?filter=${filter}`, {
-    method: "GET",
-    headers: scimHeaders,
-  });
+  const lookupRes = await fetch(
+    `https://api.slack.com/scim/v1/Users?filter=${filter}`,
+    {
+      method: "GET",
+      headers: scimHeaders,
+    },
+  );
   if (!lookupRes.ok) {
-    return fail("slack", "Slack", `Slack SCIM lookup failed: ${await lookupRes.text()}`);
+    return fail(
+      "slack",
+      "Slack",
+      `Slack SCIM lookup failed: ${await lookupRes.text()}`,
+    );
   }
   const lookupBody = await lookupRes.json();
   const existingUser =
@@ -538,21 +612,28 @@ async function deprovisionSlack(profile, secrets) {
       }
     }
   }
-  const deactivate = await fetch(`https://api.slack.com/scim/v1/Users/${existingUser.id}`, {
-    method: "PATCH",
-    headers: scimHeaders,
-    body: JSON.stringify({
-      Operations: [
-        {
-          op: "Replace",
-          path: "active",
-          value: false,
-        },
-      ],
-    }),
-  });
+  const deactivate = await fetch(
+    `https://api.slack.com/scim/v1/Users/${existingUser.id}`,
+    {
+      method: "PATCH",
+      headers: scimHeaders,
+      body: JSON.stringify({
+        Operations: [
+          {
+            op: "Replace",
+            path: "active",
+            value: false,
+          },
+        ],
+      }),
+    },
+  );
   if (!deactivate.ok) {
-    return fail("slack", "Slack", `Slack deprovision failed: ${await deactivate.text()}`);
+    return fail(
+      "slack",
+      "Slack",
+      `Slack deprovision failed: ${await deactivate.text()}`,
+    );
   }
   return ok("slack", "Slack", "Slack account deactivated via SCIM.");
 }
@@ -563,19 +644,30 @@ async function deprovisionM365(profile, secrets) {
   }
   const token = await getMicrosoftGraphToken(secrets);
   if (!token) {
-    return fail("microsoft365", "Microsoft 365", "Missing Microsoft Graph token.");
+    return fail(
+      "microsoft365",
+      "Microsoft 365",
+      "Missing Microsoft Graph token.",
+    );
   }
   const upn = profile.microsoft_upn || profile.email;
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ accountEnabled: false }),
     },
-    body: JSON.stringify({ accountEnabled: false }),
-  });
+  );
   if (!res.ok && res.status !== 404) {
-    return fail("microsoft365", "Microsoft 365", `Graph deprovision failed: ${await res.text()}`);
+    return fail(
+      "microsoft365",
+      "Microsoft 365",
+      `Graph deprovision failed: ${await res.text()}`,
+    );
   }
   return ok("microsoft365", "Microsoft 365", "M365 account disabled.");
 }
@@ -615,7 +707,11 @@ async function deprovisionGcp(profile) {
 async function deprovisionAws(profile, secrets) {
   const breakglass = isAwsBreakglassEnabled();
   if (!breakglass) {
-    return ok("aws", "AWS IAM", "Breakglass disabled; IAM Identity Center deprovision via workflow.");
+    return ok(
+      "aws",
+      "AWS IAM",
+      "Breakglass disabled; IAM Identity Center deprovision via workflow.",
+    );
   }
   const iamClient = new IAMClient(buildAwsClientConfig(secrets));
   const userName = `${process.env.AWS_NATIVE_IAM_USER_PREFIX || "um-"}${profile.firebase_uid}`;
@@ -653,7 +749,11 @@ async function deprovisionPortal(profile, secrets) {
     }),
   });
   if (!res.ok && res.status !== 404) {
-    return fail("portal", "Portal", `Portal offboard failed: ${await res.text()}`);
+    return fail(
+      "portal",
+      "Portal",
+      `Portal offboard failed: ${await res.text()}`,
+    );
   }
   return ok("portal", "Portal", "Portal access revoked.");
 }
@@ -684,7 +784,9 @@ export async function runProviderProvisioning(profile) {
                 : runner.name.includes("Aws")
                   ? "aws"
                   : "portal";
-      steps.push(fail(fallbackService, fallbackService.toUpperCase(), String(error)));
+      steps.push(
+        fail(fallbackService, fallbackService.toUpperCase(), String(error)),
+      );
     }
   }
   return steps;
@@ -732,7 +834,11 @@ export async function runProviderHealthChecks() {
       const res = await fetch("https://api.github.com/rate_limit", {
         headers: { Authorization: `Bearer ${secrets.githubToken}` },
       });
-      pushCheck("github", res.ok, res.ok ? "GitHub reachable." : await res.text());
+      pushCheck(
+        "github",
+        res.ok,
+        res.ok ? "GitHub reachable." : await res.text(),
+      );
     }
   } catch (error) {
     pushCheck("github", false, String(error));

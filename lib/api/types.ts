@@ -220,7 +220,8 @@ export interface AppEntitlement {
   subject_label: string;
   role: AppRole;
   capabilities?: string[];
-  environments: string[];
+  /** Legacy field from Firestore; ignored by the admin UI. */
+  environments?: string[];
   granted_by: string;
   expires_at?: string;
   created_at: string;
@@ -234,7 +235,6 @@ export interface GrantEntitlementRequest {
   subject_label: string;
   role: AppRole;
   capabilities?: string[];
-  environments: string[];
   granted_by?: string;
   expires_at?: string;
 }

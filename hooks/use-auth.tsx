@@ -9,7 +9,11 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
-import type { AuthUser, Entitlement, EffectiveAccessResult } from "@/lib/api/types";
+import type {
+  AuthUser,
+  Entitlement,
+  EffectiveAccessResult,
+} from "@/lib/api/types";
 import { apiClient } from "@/lib/api/client";
 
 const TOKEN_KEY = "session_token";
@@ -51,7 +55,9 @@ async function fetchProfile(uid: string): Promise<AuthUser | null> {
       ) {
         entitlements = ["*"];
       } else {
-        entitlements = ea.data.effective_access.map((e) => e.app_id as Entitlement);
+        entitlements = ea.data.effective_access.map(
+          (e) => e.app_id as Entitlement,
+        );
       }
     } catch {
       entitlements = u.role === "admin" ? ["*"] : [];
@@ -90,26 +96,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    try {
-      const res = await apiClient.post<{ token: string; uid: string }>("/auth/login", {
-        email,
-        password,
-      });
-      const { token: newToken, uid } = res.data;
-      localStorage.setItem(TOKEN_KEY, newToken);
-      setToken(newToken);
-      const profile = await fetchProfile(uid);
-      if (profile) {
-        localStorage.setItem(USER_KEY, JSON.stringify(profile));
-        setUser(profile);
-        return true;
+  const login = useCallback(
+    async (email: string, password: string): Promise<boolean> => {
+      try {
+        const res = await apiClient.post<{ token: string; uid: string }>(
+          "/auth/login",
+          {
+            email,
+            password,
+          },
+        );
+        const { token: newToken, uid } = res.data;
+        localStorage.setItem(TOKEN_KEY, newToken);
+        setToken(newToken);
+        const profile = await fetchProfile(uid);
+        if (profile) {
+          localStorage.setItem(USER_KEY, JSON.stringify(profile));
+          setUser(profile);
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
       }
-      return false;
-    } catch {
-      return false;
-    }
-  }, []);
+    },
+    [],
+  );
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
@@ -137,7 +149,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const value = useMemo<AuthState>(
-    () => ({ user, token, loading, login, logout, hasEntitlement, isAdmin, isInternal }),
+    () => ({
+      user,
+      token,
+      loading,
+      login,
+      logout,
+      hasEntitlement,
+      isAdmin,
+      isInternal,
+    }),
     [user, token, loading, login, logout, hasEntitlement, isAdmin, isInternal],
   );
 

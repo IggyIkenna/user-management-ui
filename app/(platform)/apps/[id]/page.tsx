@@ -3,13 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Plus,
-  ShieldAlert,
-  Trash2,
-  Clock,
-} from "lucide-react";
+import { ArrowLeft, Plus, ShieldAlert, Trash2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -103,14 +97,15 @@ export default function AppDetailPage() {
     subject_id: "",
     subject_label: "",
     role: "viewer" as AppRole,
-    environments: [] as string[],
     capabilities: [] as string[],
     overrideCapabilities: false,
   });
   const [granting, setGranting] = React.useState(false);
   const [grantError, setGrantError] = React.useState("");
 
-  const [revokeTarget, setRevokeTarget] = React.useState<AppEntitlement | null>(null);
+  const [revokeTarget, setRevokeTarget] = React.useState<AppEntitlement | null>(
+    null,
+  );
   const [revoking, setRevoking] = React.useState(false);
 
   const fetchApp = React.useCallback(async () => {
@@ -119,7 +114,9 @@ export default function AppDetailPage() {
       const res = await getApplication(appId);
       setApp(res.data.application);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load application");
+      setError(
+        err instanceof Error ? err.message : "Failed to load application",
+      );
     } finally {
       setLoading(false);
     }
@@ -165,19 +162,10 @@ export default function AppDetailPage() {
     fetchAudit();
   }, [fetchApp, fetchEntitlements, fetchCapabilities, fetchAudit]);
 
-  function toggleEnv(env: string) {
-    setGrantForm((f) => ({
-      ...f,
-      environments: f.environments.includes(env)
-        ? f.environments.filter((e) => e !== env)
-        : [...f.environments, env],
-    }));
-  }
-
   async function handleGrant(e: React.FormEvent) {
     e.preventDefault();
-    if (!grantForm.subject_id.trim() || grantForm.environments.length === 0) {
-      setGrantError("Subject ID and at least one environment are required.");
+    if (!grantForm.subject_id.trim()) {
+      setGrantError("Subject is required.");
       return;
     }
     setGranting(true);
@@ -187,10 +175,12 @@ export default function AppDetailPage() {
         app_id: appId,
         subject_type: grantForm.subject_type,
         subject_id: grantForm.subject_id.trim(),
-        subject_label: grantForm.subject_label.trim() || grantForm.subject_id.trim(),
+        subject_label:
+          grantForm.subject_label.trim() || grantForm.subject_id.trim(),
         role: grantForm.role,
-        capabilities: grantForm.overrideCapabilities ? grantForm.capabilities : undefined,
-        environments: grantForm.environments,
+        capabilities: grantForm.overrideCapabilities
+          ? grantForm.capabilities
+          : undefined,
       });
       setGrantOpen(false);
       setGrantForm({
@@ -198,14 +188,15 @@ export default function AppDetailPage() {
         subject_id: "",
         subject_label: "",
         role: "viewer",
-        environments: [],
         capabilities: [],
         overrideCapabilities: false,
       });
       await fetchEntitlements();
       await fetchAudit();
     } catch (err) {
-      setGrantError(err instanceof Error ? err.message : "Failed to grant access");
+      setGrantError(
+        err instanceof Error ? err.message : "Failed to grant access",
+      );
     } finally {
       setGranting(false);
     }
@@ -220,7 +211,9 @@ export default function AppDetailPage() {
       await fetchEntitlements();
       await fetchAudit();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to revoke entitlement");
+      setError(
+        err instanceof Error ? err.message : "Failed to revoke entitlement",
+      );
     } finally {
       setRevoking(false);
     }
@@ -249,9 +242,6 @@ export default function AppDetailPage() {
       </div>
     );
   }
-
-  const envChoices =
-    app.environments.length > 0 ? app.environments : ["dev", "staging", "prod"];
 
   return (
     <div className="space-y-6">
@@ -287,14 +277,6 @@ export default function AppDetailPage() {
         <CardContent>
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span>Owner: {app.owner_team}</span>
-            <span>
-              Environments:{" "}
-              {app.environments.map((env) => (
-                <Badge key={env} variant="secondary" className="text-xs ml-1">
-                  {env}
-                </Badge>
-              ))}
-            </span>
           </div>
         </CardContent>
       </Card>
@@ -306,296 +288,287 @@ export default function AppDetailPage() {
         </TabsList>
 
         <TabsContent value="entitlements" className="space-y-6">
-      {(!capDefinition || capDefinition.capabilities.length === 0) && (
-        <p className="text-sm rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-muted-foreground">
-          No capability definitions in Firestore for this app yet. Open the{" "}
-          <strong className="text-foreground">Capabilities</strong> tab and use{" "}
-          <strong className="text-foreground">Import defaults from seed file</strong>, or run{" "}
-          <code className="text-xs">POST /api/v1/apps/capabilities/seed</code> on the API.
-        </p>
-      )}
-      {/* Grant Access */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Entitlements</h2>
-        <Dialog
-          open={grantOpen}
-          onOpenChange={(open) => {
-            setGrantOpen(open);
-            if (open) {
-              const envs =
-                app.environments.length > 0 ? app.environments : ["dev", "staging", "prod"];
-              setGrantForm({
-                subject_type: "user",
-                subject_id: "",
-                subject_label: "",
-                role: "viewer",
-                environments: [...envs],
-                capabilities: [],
-                overrideCapabilities: false,
-              });
-              setGrantError("");
-            }
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="mr-2 size-4" />
-              Grant Access
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <form onSubmit={handleGrant}>
-              <DialogHeader>
-                <DialogTitle>Grant Access</DialogTitle>
-                <DialogDescription>
-                  Grant a user or group access to {app.name}.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-1.5">
-                  <Label>Subject Type</Label>
-                  <Select
-                    value={grantForm.subject_type}
-                    onValueChange={(v) =>
-                      setGrantForm((f) => ({
-                        ...f,
-                        subject_type: v as "user" | "group",
-                        subject_id: "",
-                        subject_label: "",
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="group">Group</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <GrantSubjectField
-                  subjectType={grantForm.subject_type}
-                  subjectId={grantForm.subject_id}
-                  subjectLabel={grantForm.subject_label}
-                  onSubjectChange={(id, label) =>
-                    setGrantForm((f) => ({ ...f, subject_id: id, subject_label: label }))
-                  }
-                />
-                <div className="space-y-1.5">
-                  <Label>Role</Label>
-                  <Select
-                    value={grantForm.role}
-                    onValueChange={(v) =>
-                      setGrantForm((f) => ({ ...f, role: v as AppRole }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="viewer">Viewer</SelectItem>
-                      <SelectItem value="editor">Editor</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="owner">Owner</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Environments</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Uses registry values: {envChoices.join(", ")}.
-                  </p>
-                  <div className="flex flex-wrap gap-4">
-                    {envChoices.map((env) => (
-                      <label
-                        key={env}
-                        className="flex items-center gap-1.5 text-sm"
-                      >
-                        <Checkbox
-                          checked={grantForm.environments.includes(env)}
-                          onCheckedChange={() => toggleEnv(env)}
-                        />
-                        {env}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                {capDefinition && capDefinition.capabilities.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={grantForm.overrideCapabilities}
-                        onCheckedChange={(checked) => {
-                          const preset = capDefinition.role_presets[grantForm.role] || [];
+          {(!capDefinition || capDefinition.capabilities.length === 0) && (
+            <p className="text-sm rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-muted-foreground">
+              No capability definitions in Firestore for this app yet. Open the{" "}
+              <strong className="text-foreground">Capabilities</strong> tab and
+              use{" "}
+              <strong className="text-foreground">
+                Import defaults from seed file
+              </strong>
+              , or run{" "}
+              <code className="text-xs">
+                POST /api/v1/apps/capabilities/seed
+              </code>{" "}
+              on the API.
+            </p>
+          )}
+          {/* Grant Access */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Entitlements</h2>
+            <Dialog
+              open={grantOpen}
+              onOpenChange={(open) => {
+                setGrantOpen(open);
+                if (open) {
+                  setGrantForm({
+                    subject_type: "user",
+                    subject_id: "",
+                    subject_label: "",
+                    role: "viewer",
+                    capabilities: [],
+                    overrideCapabilities: false,
+                  });
+                  setGrantError("");
+                }
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="mr-2 size-4" />
+                  Grant Access
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <form onSubmit={handleGrant}>
+                  <DialogHeader>
+                    <DialogTitle>Grant Access</DialogTitle>
+                    <DialogDescription>
+                      Grant a user or group access to {app.name}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-1.5">
+                      <Label>Subject Type</Label>
+                      <Select
+                        value={grantForm.subject_type}
+                        onValueChange={(v) =>
                           setGrantForm((f) => ({
                             ...f,
-                            overrideCapabilities: Boolean(checked),
-                            capabilities: checked ? (preset.includes("*")
-                              ? capDefinition.capabilities.map((c) => c.key)
-                              : [...preset]) : [],
-                          }));
-                        }}
-                      />
-                      <Label className="text-sm">Override capabilities for this grant</Label>
+                            subject_type: v as "user" | "group",
+                            subject_id: "",
+                            subject_label: "",
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="group">Group</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    {grantForm.overrideCapabilities && (
-                      <ScrollArea className="max-h-48 rounded-md border p-2">
-                        {capDefinition.capabilities.map((cap) => (
-                          <label
-                            key={cap.key}
-                            className="flex items-center gap-2 py-0.5 text-sm"
-                          >
-                            <Checkbox
-                              checked={grantForm.capabilities.includes(cap.key)}
-                              onCheckedChange={(checked) => {
-                                setGrantForm((f) => ({
-                                  ...f,
-                                  capabilities: checked
-                                    ? [...f.capabilities, cap.key]
-                                    : f.capabilities.filter((c) => c !== cap.key),
-                                }));
-                              }}
-                            />
-                            <Badge
-                              variant="outline"
-                              className={
-                                cap.category === "view"
-                                  ? "border-blue-600/30 text-blue-400 text-[10px]"
-                                  : "border-amber-600/30 text-amber-400 text-[10px]"
-                              }
-                            >
-                              {cap.category}
-                            </Badge>
-                            {cap.label}
-                          </label>
-                        ))}
-                      </ScrollArea>
+                    <GrantSubjectField
+                      subjectType={grantForm.subject_type}
+                      subjectId={grantForm.subject_id}
+                      subjectLabel={grantForm.subject_label}
+                      onSubjectChange={(id, label) =>
+                        setGrantForm((f) => ({
+                          ...f,
+                          subject_id: id,
+                          subject_label: label,
+                        }))
+                      }
+                    />
+                    <div className="space-y-1.5">
+                      <Label>Role</Label>
+                      <Select
+                        value={grantForm.role}
+                        onValueChange={(v) =>
+                          setGrantForm((f) => ({ ...f, role: v as AppRole }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                          <SelectItem value="editor">Editor</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="owner">Owner</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {capDefinition && capDefinition.capabilities.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={grantForm.overrideCapabilities}
+                            onCheckedChange={(checked) => {
+                              const preset =
+                                capDefinition.role_presets[grantForm.role] ||
+                                [];
+                              setGrantForm((f) => ({
+                                ...f,
+                                overrideCapabilities: Boolean(checked),
+                                capabilities: checked
+                                  ? preset.includes("*")
+                                    ? capDefinition.capabilities.map(
+                                        (c) => c.key,
+                                      )
+                                    : [...preset]
+                                  : [],
+                              }));
+                            }}
+                          />
+                          <Label className="text-sm">
+                            Override capabilities for this grant
+                          </Label>
+                        </div>
+                        {grantForm.overrideCapabilities && (
+                          <ScrollArea className="max-h-48 rounded-md border p-2">
+                            {capDefinition.capabilities.map((cap) => (
+                              <label
+                                key={cap.key}
+                                className="flex items-center gap-2 py-0.5 text-sm"
+                              >
+                                <Checkbox
+                                  checked={grantForm.capabilities.includes(
+                                    cap.key,
+                                  )}
+                                  onCheckedChange={(checked) => {
+                                    setGrantForm((f) => ({
+                                      ...f,
+                                      capabilities: checked
+                                        ? [...f.capabilities, cap.key]
+                                        : f.capabilities.filter(
+                                            (c) => c !== cap.key,
+                                          ),
+                                    }));
+                                  }}
+                                />
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    cap.category === "view"
+                                      ? "border-blue-600/30 text-blue-400 text-[10px]"
+                                      : "border-amber-600/30 text-amber-400 text-[10px]"
+                                  }
+                                >
+                                  {cap.category}
+                                </Badge>
+                                {cap.label}
+                              </label>
+                            ))}
+                          </ScrollArea>
+                        )}
+                      </div>
+                    )}
+                    {grantError && (
+                      <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+                        {grantError}
+                      </p>
                     )}
                   </div>
-                )}
-                {grantError && (
-                  <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
-                    {grantError}
-                  </p>
-                )}
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={granting}>
-                  {granting ? "Granting…" : "Grant Access"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {entLoading ? (
-        <TableSkeleton rows={5} columns={6} />
-      ) : entitlements.length === 0 ? (
-        <EmptyState
-          icon={ShieldAlert}
-          title="No entitlements"
-          description="Grant access to users or groups above."
-        />
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Subject</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Environments</TableHead>
-                <TableHead>Granted</TableHead>
-                <TableHead className="w-16" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entitlements.map((ent) => (
-                <TableRow key={ent.id}>
-                  <TableCell className="font-medium">
-                    {ent.subject_label}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{ent.subject_type}</Badge>
-                  </TableCell>
-                  <TableCell>{ent.role}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1 flex-wrap">
-                      {ent.environments.map((env) => (
-                        <Badge key={env} variant="secondary" className="text-xs">
-                          {env}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {formatDateTime(ent.created_at)}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 text-destructive hover:text-destructive"
-                      onClick={() => setRevokeTarget(ent)}
-                    >
-                      <Trash2 className="size-3.5" />
+                  <DialogFooter>
+                    <Button type="submit" disabled={granting}>
+                      {granting ? "Granting…" : "Grant Access"}
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      <Separator />
-
-      {/* Audit Trail */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-          <Clock className="size-4 text-muted-foreground" />
-          Audit Trail
-        </h2>
-        {auditLoading ? (
-          <TableSkeleton rows={4} columns={4} />
-        ) : auditLog.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No audit events for this application.</p>
-        ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Actor</TableHead>
-                  <TableHead>Timestamp</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {auditLog.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell>
-                      <Badge variant="outline">{entry.action}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {entry.subject_id || "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {entry.actor}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDateTime(entry.timestamp)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
-        )}
-      </div>
 
+          {entLoading ? (
+            <TableSkeleton rows={5} columns={5} />
+          ) : entitlements.length === 0 ? (
+            <EmptyState
+              icon={ShieldAlert}
+              title="No entitlements"
+              description="Grant access to users or groups above."
+            />
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Granted</TableHead>
+                    <TableHead className="w-16" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entitlements.map((ent) => (
+                    <TableRow key={ent.id}>
+                      <TableCell className="font-medium">
+                        {ent.subject_label}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{ent.subject_type}</Badge>
+                      </TableCell>
+                      <TableCell>{ent.role}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {formatDateTime(ent.created_at)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-destructive hover:text-destructive"
+                          onClick={() => setRevokeTarget(ent)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Audit Trail */}
+          <div>
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Clock className="size-4 text-muted-foreground" />
+              Audit Trail
+            </h2>
+            {auditLoading ? (
+              <TableSkeleton rows={4} columns={4} />
+            ) : auditLog.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No audit events for this application.
+              </p>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>Actor</TableHead>
+                      <TableHead>Timestamp</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {auditLog.map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell>
+                          <Badge variant="outline">{entry.action}</Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {entry.subject_id || "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {entry.actor}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {formatDateTime(entry.timestamp)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="capabilities">
@@ -613,7 +586,8 @@ export default function AppDetailPage() {
             <AlertDialogTitle>Revoke access?</AlertDialogTitle>
             <AlertDialogDescription>
               This will revoke {revokeTarget?.role} access for &ldquo;
-              {revokeTarget?.subject_label}&rdquo;. This action cannot be undone.
+              {revokeTarget?.subject_label}&rdquo;. This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

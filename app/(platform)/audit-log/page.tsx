@@ -1,14 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileText, Shield, UserMinus, UserPlus, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Download,
+  FileText,
+  Shield,
+  UserMinus,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
@@ -76,7 +78,9 @@ export default function AuditLogPage() {
   const stats = React.useMemo(() => {
     const grants = entries.filter((e) => e.action.includes("grant")).length;
     const revokes = entries.filter((e) => e.action.includes("revoke")).length;
-    const groupChanges = entries.filter((e) => e.action.startsWith("group.")).length;
+    const groupChanges = entries.filter((e) =>
+      e.action.startsWith("group."),
+    ).length;
     return { grants, revokes, groupChanges };
   }, [entries]);
 
@@ -106,7 +110,12 @@ export default function AuditLogPage() {
             Track all access and administrative changes
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={exportCsv} disabled={entries.length === 0}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={exportCsv}
+          disabled={entries.length === 0}
+        >
           <Download className="mr-2 size-4" />
           Export CSV
         </Button>
@@ -218,7 +227,9 @@ export default function AuditLogPage() {
                   <TableCell className="text-muted-foreground">
                     {e.app_id || "—"}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{e.actor}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {e.actor}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {formatDateTime(e.timestamp)}
                   </TableCell>

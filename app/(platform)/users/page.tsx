@@ -139,8 +139,7 @@ export default function UsersListPage() {
       const q = search.toLowerCase();
       result = result.filter(
         (u) =>
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q),
+          u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
       );
     }
     if (roleFilter !== "all") {
@@ -201,7 +200,10 @@ export default function UsersListPage() {
           }
           action={
             !search && roleFilter === "all"
-              ? { label: "Onboard User", onClick: () => router.push("/onboard") }
+              ? {
+                  label: "Onboard User",
+                  onClick: () => router.push("/onboard"),
+                }
               : undefined
           }
         />
@@ -234,9 +236,7 @@ export default function UsersListPage() {
                     {user.email}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">
-                      {user.role}
-                    </Badge>
+                    <Badge variant="secondary">{user.role}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusBadgeVariant(user.status)}>
@@ -245,7 +245,9 @@ export default function UsersListPage() {
                   </TableCell>
                   {SERVICE_COLUMNS.map((s) => (
                     <TableCell key={s.key} className="text-center">
-                      <Badge variant={serviceBadgeVariant(user.services[s.key])}>
+                      <Badge
+                        variant={serviceBadgeVariant(user.services[s.key])}
+                      >
                         {serviceLabel(user.services[s.key])}
                       </Badge>
                     </TableCell>

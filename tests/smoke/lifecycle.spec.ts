@@ -96,7 +96,11 @@ test.describe("user lifecycle smoke", () => {
           body: JSON.stringify({
             user,
             provisioning_steps: [
-              { service: "firebase", label: "Firebase Auth", status: "success" },
+              {
+                service: "firebase",
+                label: "Firebase Auth",
+                status: "success",
+              },
             ],
           }),
         });
@@ -104,11 +108,16 @@ test.describe("user lifecycle smoke", () => {
 
       if (method === "POST" && path.endsWith("/offboard")) {
         const id = path.split("/")[4];
-        users = users.map((u) => (u.id === id ? { ...u, status: "offboarded" } : u));
+        users = users.map((u) =>
+          u.id === id ? { ...u, status: "offboarded" } : u,
+        );
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ user: users.find((u) => u.id === id), revocation_steps: [] }),
+          body: JSON.stringify({
+            user: users.find((u) => u.id === id),
+            revocation_steps: [],
+          }),
         });
       }
 
@@ -116,7 +125,10 @@ test.describe("user lifecycle smoke", () => {
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ workflow_execution: "smoke/reprovision/1", provisioning_steps: [] }),
+          body: JSON.stringify({
+            workflow_execution: "smoke/reprovision/1",
+            provisioning_steps: [],
+          }),
         });
       }
 
@@ -139,7 +151,9 @@ test.describe("user lifecycle smoke", () => {
   test("onboard flow", async ({ page }) => {
     await page.goto("/onboard");
     await page.getByPlaceholder("Jane Doe").fill("Smoke User");
-    await page.getByPlaceholder("jane@odum-research.com").fill("smoke-user@test.com");
+    await page
+      .getByPlaceholder("jane@odum-research.com")
+      .fill("smoke-user@test.com");
     await page.getByRole("button", { name: "elysium" }).click();
     await page.getByRole("button", { name: "Onboard User" }).click();
     await expect(page.getByText("Provisioning Complete")).toBeVisible();

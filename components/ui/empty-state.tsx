@@ -11,7 +11,12 @@ interface EmptyStateProps {
   action?: { label: string; onClick: () => void };
 }
 
-function EmptyState({ icon: Icon = Inbox, title, description, action }: EmptyStateProps) {
+function EmptyState({
+  icon: Icon = Inbox,
+  title,
+  description,
+  action,
+}: EmptyStateProps) {
   return (
     <div
       data-slot="empty-state"
@@ -22,7 +27,9 @@ function EmptyState({ icon: Icon = Inbox, title, description, action }: EmptySta
       <Icon className="text-muted-foreground size-10" />
       <h3 className="text-muted-foreground text-sm font-semibold">{title}</h3>
       {description && (
-        <p className="text-muted-foreground/70 max-w-sm text-sm">{description}</p>
+        <p className="text-muted-foreground/70 max-w-sm text-sm">
+          {description}
+        </p>
       )}
       {action && (
         <Button variant="outline" size="sm" onClick={action.onClick}>

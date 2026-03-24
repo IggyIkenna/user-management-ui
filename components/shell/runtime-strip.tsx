@@ -19,7 +19,9 @@ export function RuntimeStrip() {
   React.useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch("/health", { signal: AbortSignal.timeout(3000) });
+        const res = await fetch("/health", {
+          signal: AbortSignal.timeout(3000),
+        });
         const data = await res.json();
         if (data?.status === "healthy" || res.ok) {
           setApiStatus("reachable");
@@ -48,7 +50,9 @@ export function RuntimeStrip() {
 
         <div className="w-px h-3 bg-border/50" />
 
-        <span className={cn("flex items-center gap-1", statusColors[apiStatus])}>
+        <span
+          className={cn("flex items-center gap-1", statusColors[apiStatus])}
+        >
           <Circle
             className={cn(
               "size-1.5 fill-current",

@@ -171,9 +171,7 @@ export default function UserDetailPage() {
       }
       await loadData();
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Re-provisioning failed",
-      );
+      setError(err instanceof Error ? err.message : "Re-provisioning failed");
     } finally {
       setReprovisioning(false);
     }

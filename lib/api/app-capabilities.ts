@@ -27,7 +27,9 @@ export async function authorize(appId: string, uid: string, env?: string) {
 }
 
 export async function seedCapabilities() {
-  return apiClient.post<{ created: number; updated: number; synced_at: string }>(
-    "/apps/capabilities/seed",
-  );
+  return apiClient.post<{
+    created: number;
+    updated: number;
+    synced_at: string;
+  }>("/apps/capabilities/seed");
 }

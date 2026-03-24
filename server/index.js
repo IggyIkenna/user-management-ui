@@ -27,7 +27,10 @@ import {
   runProviderHealthChecks,
   runProviderProvisioning,
 } from "./providers.js";
-import { loadProviderSecrets, resolveFirebaseApiKey } from "./secret-manager.js";
+import {
+  loadProviderSecrets,
+  resolveFirebaseApiKey,
+} from "./secret-manager.js";
 
 const PORT = Number(process.env.PORT || 8017);
 const FIREBASE_PROJECT_ID =
@@ -174,7 +177,10 @@ function validateAccessTemplatePayload(payload, isPartial = false) {
 async function resolveUserUid(inputId) {
   const direct = await usersCollection().doc(inputId).get();
   if (direct.exists) return inputId;
-  const query = await usersCollection().where("id", "==", inputId).limit(1).get();
+  const query = await usersCollection()
+    .where("id", "==", inputId)
+    .limit(1)
+    .get();
   if (!query.empty) return query.docs[0].id;
   return inputId;
 }
@@ -199,7 +205,10 @@ async function listTemplateAssignmentCounts() {
 }
 
 async function startWorkflowExecution(workflowName, argument) {
-  const workflowExecutionEnabled = parseBool("WORKFLOW_EXECUTION_ENABLED", true);
+  const workflowExecutionEnabled = parseBool(
+    "WORKFLOW_EXECUTION_ENABLED",
+    true,
+  );
   if (!workflowExecutionEnabled) {
     return {
       name: `disabled/${workflowName}/${Date.now()}`,
@@ -266,14 +275,20 @@ async function updateWorkflowRunStatus(executionName, execution) {
     },
     { merge: true },
   );
-  if (firebaseUid && (execution.state === "FAILED" || execution.state === "FAILED_TO_START")) {
-    await usersCollection().doc(firebaseUid).set(
-      {
-        workflow_failure_reason: execution.error || execution.result || "workflow failed",
-        last_modified: new Date().toISOString(),
-      },
-      { merge: true },
-    );
+  if (
+    firebaseUid &&
+    (execution.state === "FAILED" || execution.state === "FAILED_TO_START")
+  ) {
+    await usersCollection()
+      .doc(firebaseUid)
+      .set(
+        {
+          workflow_failure_reason:
+            execution.error || execution.result || "workflow failed",
+          last_modified: new Date().toISOString(),
+        },
+        { merge: true },
+      );
   }
 }
 
@@ -445,7 +460,9 @@ function normalizeObservedServiceStatus(status, message, fallback) {
 async function computeQuotaCheck(role) {
   const users = await listUsersWithProfiles();
   const active = users.filter((u) => u.status === "active");
-  const slackUsed = active.filter((u) => u.services.slack === "provisioned").length;
+  const slackUsed = active.filter(
+    (u) => u.services.slack === "provisioned",
+  ).length;
   const m365Used = active.filter(
     (u) => u.services.microsoft365 === "provisioned",
   ).length;
@@ -464,8 +481,10 @@ async function computeQuotaCheck(role) {
       available: Math.max(m365Limit - m365Used, 0),
     },
   ];
-  const slackOk = !roleNeedsSlack(role) || slackLimit === 0 || checks[0].available > 0;
-  const m365Ok = !roleNeedsM365(role) || m365Limit === 0 || checks[1].available > 0;
+  const slackOk =
+    !roleNeedsSlack(role) || slackLimit === 0 || checks[0].available > 0;
+  const m365Ok =
+    !roleNeedsM365(role) || m365Limit === 0 || checks[1].available > 0;
   return {
     ok: slackOk && m365Ok,
     checks,
@@ -488,11 +507,15 @@ app.post("/api/v1/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
-      return res.status(400).json({ error: "email and password are required." });
+      return res
+        .status(400)
+        .json({ error: "email and password are required." });
     }
     const apiKey = await resolveFirebaseApiKey();
     if (!apiKey) {
-      return res.status(500).json({ error: "FIREBASE_API_KEY not configured on server." });
+      return res
+        .status(500)
+        .json({ error: "FIREBASE_API_KEY not configured on server." });
     }
     const authResp = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
@@ -554,7 +577,9 @@ app.get("/api/v1/firebase-users", async (_req, res) => {
 app.get("/api/v1/users/:id", async (req, res) => {
   try {
     const users = await listUsersWithProfiles();
-    const user = users.find((u) => u.id === req.params.id || u.firebase_uid === req.params.id);
+    const user = users.find(
+      (u) => u.id === req.params.id || u.firebase_uid === req.params.id,
+    );
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -592,7 +617,10 @@ app.post("/api/v1/admin/health-checks", async (_req, res) => {
   try {
     const checks = await runProviderHealthChecks();
     const secrets = await loadProviderSecrets();
-    const workflowExecutionEnabled = parseBool("WORKFLOW_EXECUTION_ENABLED", true);
+    const workflowExecutionEnabled = parseBool(
+      "WORKFLOW_EXECUTION_ENABLED",
+      true,
+    );
 
     // Firebase connectivity check
     try {
@@ -733,7 +761,9 @@ app.post("/api/v1/users/quota-check", async (req, res) => {
 app.get("/api/v1/access-templates", async (_req, res) => {
   try {
     const assignmentCounts = await listTemplateAssignmentCounts();
-    const snapshot = await templatesCollection().orderBy("updated_at", "desc").get();
+    const snapshot = await templatesCollection()
+      .orderBy("updated_at", "desc")
+      .get();
     const templates = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -750,7 +780,9 @@ app.post("/api/v1/access-templates", async (req, res) => {
     const payload = req.body || {};
     const errors = validateAccessTemplatePayload(payload, false);
     if (errors.length > 0) {
-      return res.status(400).json({ error: "Validation failed.", details: errors });
+      return res
+        .status(400)
+        .json({ error: "Validation failed.", details: errors });
     }
     const now = new Date().toISOString();
     const docRef = await templatesCollection().add({
@@ -774,7 +806,9 @@ app.put("/api/v1/access-templates/:id", async (req, res) => {
     const payload = req.body || {};
     const errors = validateAccessTemplatePayload(payload, true);
     if (errors.length > 0) {
-      return res.status(400).json({ error: "Validation failed.", details: errors });
+      return res
+        .status(400)
+        .json({ error: "Validation failed.", details: errors });
     }
     const id = req.params.id;
     const ref = templatesCollection().doc(id);
@@ -842,12 +876,16 @@ app.post("/api/v1/users/onboard", async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.email || !payload.name || !payload.role) {
-      return res.status(400).json({ error: "name, email, and role are required." });
+      return res
+        .status(400)
+        .json({ error: "name, email, and role are required." });
     }
 
     const quota = await computeQuotaCheck(payload.role);
     if (!quota.ok) {
-      return res.status(409).json({ error: quota.message, quota, code: "QUOTA_EXCEEDED" });
+      return res
+        .status(409)
+        .json({ error: quota.message, quota, code: "QUOTA_EXCEEDED" });
     }
 
     const firebaseUser = await auth.createUser({
@@ -862,7 +900,9 @@ app.post("/api/v1/users/onboard", async (req, res) => {
     });
 
     const now = new Date().toISOString();
-    const accessTemplate = await getAccessTemplateById(payload.access_template_id);
+    const accessTemplate = await getAccessTemplateById(
+      payload.access_template_id,
+    );
     const profile = {
       id: payload.id || firebaseUser.uid,
       name: payload.name,
@@ -923,7 +963,8 @@ app.post("/api/v1/users/onboard", async (req, res) => {
           serviceSyncedAt[step.service] = new Date().toISOString();
           if (step.status !== "success") {
             servicePatch[step.service] = "failed";
-            serviceMessages[step.service] = step.message || "Provider execution failed.";
+            serviceMessages[step.service] =
+              step.message || "Provider execution failed.";
             if (!workflowFailureReason) {
               workflowFailureReason = `${step.label}: ${step.message || "failed"}`;
             }
@@ -936,22 +977,24 @@ app.post("/api/v1/users/onboard", async (req, res) => {
           }
         }
       }
-      await usersCollection().doc(firebaseUser.uid).set(
-        {
-          services: {
-            ...profile.services,
-            ...servicePatch,
+      await usersCollection()
+        .doc(firebaseUser.uid)
+        .set(
+          {
+            services: {
+              ...profile.services,
+              ...servicePatch,
+            },
+            service_messages: serviceMessages,
+            service_synced_at: {
+              ...(profile.service_synced_at || {}),
+              ...serviceSyncedAt,
+            },
+            workflow_failure_reason: workflowFailureReason,
+            last_modified: new Date().toISOString(),
           },
-          service_messages: serviceMessages,
-          service_synced_at: {
-            ...(profile.service_synced_at || {}),
-            ...serviceSyncedAt,
-          },
-          workflow_failure_reason: workflowFailureReason,
-          last_modified: new Date().toISOString(),
-        },
-        { merge: true },
-      );
+          { merge: true },
+        );
     }
 
     res.status(201).json({
@@ -981,7 +1024,9 @@ app.put("/api/v1/users/:id", async (req, res) => {
       last_modified: new Date().toISOString(),
     };
     if (payload.access_template_id !== undefined) {
-      next.access_template = await getAccessTemplateById(payload.access_template_id);
+      next.access_template = await getAccessTemplateById(
+        payload.access_template_id,
+      );
     }
     await profileRef.set(next, { merge: true });
     if (payload.role) {
@@ -1026,7 +1071,8 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
     const profile = profileSnapshot.data() || {};
     const defaultDeactivate = parseBool("OFFBOARD_DEFAULT_DEACTIVATE", true);
     const doDelete =
-      actions.firebase === "delete" || (!defaultDeactivate && actions.firebase !== "deactivate");
+      actions.firebase === "delete" ||
+      (!defaultDeactivate && actions.firebase !== "deactivate");
 
     if (doDelete) {
       await auth.deleteUser(id);
@@ -1042,11 +1088,14 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
       { merge: true },
     );
 
-    const execution = await safeStartWorkflowExecution(WORKFLOW_NAMES.offboard, {
-      firebase_uid: id,
-      actions,
-      source_project: FIREBASE_PROJECT_ID,
-    });
+    const execution = await safeStartWorkflowExecution(
+      WORKFLOW_NAMES.offboard,
+      {
+        firebase_uid: id,
+        actions,
+        source_project: FIREBASE_PROJECT_ID,
+      },
+    );
     await logWorkflowRun({
       firebase_uid: id,
       run_type: "offboard",
@@ -1084,7 +1133,8 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
           serviceSyncedAt[step.service] = new Date().toISOString();
           if (step.status !== "success") {
             servicePatch[step.service] = "failed";
-            serviceMessages[step.service] = step.message || "Provider deprovision failed.";
+            serviceMessages[step.service] =
+              step.message || "Provider deprovision failed.";
             if (!workflowFailureReason) {
               workflowFailureReason = `${step.label}: ${step.message || "failed"}`;
             }
@@ -1094,21 +1144,23 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
           }
         }
       }
-      await usersCollection().doc(id).set(
-        {
-          services: {
-            ...(profile?.services || {}),
-            ...servicePatch,
+      await usersCollection()
+        .doc(id)
+        .set(
+          {
+            services: {
+              ...(profile?.services || {}),
+              ...servicePatch,
+            },
+            service_messages: serviceMessages,
+            service_synced_at: {
+              ...(profile?.service_synced_at || {}),
+              ...serviceSyncedAt,
+            },
+            workflow_failure_reason: workflowFailureReason,
           },
-          service_messages: serviceMessages,
-          service_synced_at: {
-            ...(profile?.service_synced_at || {}),
-            ...serviceSyncedAt,
-          },
-          workflow_failure_reason: workflowFailureReason,
-        },
-        { merge: true },
-      );
+          { merge: true },
+        );
     }
 
     const userSnapshot = await usersCollection().doc(id).get();
@@ -1134,12 +1186,15 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
       return res.status(404).json({ error: "User profile not found." });
     }
     const profile = snapshot.data();
-    const execution = await safeStartWorkflowExecution(WORKFLOW_NAMES.reprovision, {
-      firebase_uid: id,
-      profile,
-      access_template: profile?.access_template || null,
-      source_project: FIREBASE_PROJECT_ID,
-    });
+    const execution = await safeStartWorkflowExecution(
+      WORKFLOW_NAMES.reprovision,
+      {
+        firebase_uid: id,
+        profile,
+        access_template: profile?.access_template || null,
+        source_project: FIREBASE_PROJECT_ID,
+      },
+    );
     await logWorkflowRun({
       firebase_uid: id,
       run_type: "reprovision",
@@ -1170,7 +1225,8 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
           serviceSyncedAt[step.service] = new Date().toISOString();
           if (step.status !== "success") {
             servicePatch[step.service] = "failed";
-            serviceMessages[step.service] = step.message || "Provider execution failed.";
+            serviceMessages[step.service] =
+              step.message || "Provider execution failed.";
             if (!workflowFailureReason) {
               workflowFailureReason = `${step.label}: ${step.message || "failed"}`;
             }
@@ -1223,7 +1279,10 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
 app.get("/api/v1/apps", async (_req, res) => {
   try {
     const snapshot = await applicationsCollection().orderBy("name").get();
-    const applications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const applications = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
     res.json({ applications, total: applications.length });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -1263,7 +1322,14 @@ app.put("/api/v1/apps/:id", async (req, res) => {
     if (!doc.exists) {
       return res.status(404).json({ error: "Application not found." });
     }
-    const allowed = ["name", "category", "environments", "owner_team", "default_template_id", "status"];
+    const allowed = [
+      "name",
+      "category",
+      "environments",
+      "owner_team",
+      "default_template_id",
+      "status",
+    ];
     const patch = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) patch[key] = req.body[key];
@@ -1300,7 +1366,9 @@ app.post("/api/v1/apps/seed", async (_req, res) => {
 
     for (const entry of seedData) {
       if (!entry.app_id || !entry.name) {
-        errors.push(`Skipped invalid seed entry: ${JSON.stringify(entry).slice(0, 80)}`);
+        errors.push(
+          `Skipped invalid seed entry: ${JSON.stringify(entry).slice(0, 80)}`,
+        );
         skipped++;
         continue;
       }
@@ -1309,21 +1377,37 @@ app.post("/api/v1/apps/seed", async (_req, res) => {
           (d) => (d.data().app_id || d.id) === entry.app_id,
         );
         if (existing) {
-          await existing.ref.set({ ...entry, status: existing.data().status || "active", updated_at: now }, { merge: true });
+          await existing.ref.set(
+            {
+              ...entry,
+              status: existing.data().status || "active",
+              updated_at: now,
+            },
+            { merge: true },
+          );
         }
         updated++;
       } else {
-        await applicationsCollection().doc(entry.app_id).set({
-          ...entry,
-          status: "active",
-          created_at: now,
-          updated_at: now,
-        });
+        await applicationsCollection()
+          .doc(entry.app_id)
+          .set({
+            ...entry,
+            status: "active",
+            created_at: now,
+            updated_at: now,
+          });
         created++;
       }
     }
 
-    const result = { created, updated, skipped, errors, synced_at: now, source: "seed-file" };
+    const result = {
+      created,
+      updated,
+      skipped,
+      errors,
+      synced_at: now,
+      source: "seed-file",
+    };
     await appSyncHistoryCollection().add({ ...result, created_at: now });
     res.json(result);
   } catch (error) {
@@ -1353,7 +1437,10 @@ app.post("/api/v1/apps/sync", async (_req, res) => {
         continue;
       }
       if (!entry.data.status) {
-        await entry.ref.set({ status: "active", updated_at: now }, { merge: true });
+        await entry.ref.set(
+          { status: "active", updated_at: now },
+          { merge: true },
+        );
         updated++;
       } else {
         skipped++;
@@ -1391,13 +1478,19 @@ app.post("/api/v1/apps/:appId/entitlements", async (req, res) => {
     const payload = req.body || {};
     const appId = req.params.appId;
     if (!payload.subject_type || !payload.subject_id || !payload.role) {
-      return res.status(400).json({ error: "subject_type, subject_id, and role are required." });
+      return res
+        .status(400)
+        .json({ error: "subject_type, subject_id, and role are required." });
     }
     if (!["user", "group"].includes(payload.subject_type)) {
-      return res.status(400).json({ error: "subject_type must be 'user' or 'group'." });
+      return res
+        .status(400)
+        .json({ error: "subject_type must be 'user' or 'group'." });
     }
     if (!["viewer", "editor", "admin", "owner"].includes(payload.role)) {
-      return res.status(400).json({ error: "role must be viewer, editor, admin, or owner." });
+      return res
+        .status(400)
+        .json({ error: "role must be viewer, editor, admin, or owner." });
     }
 
     const appRef = applicationsCollection().doc(appId);
@@ -1417,8 +1510,12 @@ app.post("/api/v1/apps/:appId/entitlements", async (req, res) => {
       await doc.ref.set(
         {
           role: payload.role,
-          capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : (doc.data().capabilities || []),
-          environments: payload.environments || appDoc.data().environments || [],
+          capabilities: Array.isArray(payload.capabilities)
+            ? payload.capabilities
+            : doc.data().capabilities || [],
+          environments: Array.isArray(payload.environments)
+            ? payload.environments
+            : [],
           subject_label: payload.subject_label || doc.data().subject_label,
           granted_by: payload.granted_by || "admin",
           expires_at: payload.expires_at || null,
@@ -1427,7 +1524,14 @@ app.post("/api/v1/apps/:appId/entitlements", async (req, res) => {
         { merge: true },
       );
       const updated = await doc.ref.get();
-      await writeAuditEntry({ action: "entitlement.updated", app_id: appId, subject_type: payload.subject_type, subject_id: payload.subject_id, role: payload.role, actor: payload.granted_by || "admin" });
+      await writeAuditEntry({
+        action: "entitlement.updated",
+        app_id: appId,
+        subject_type: payload.subject_type,
+        subject_id: payload.subject_id,
+        role: payload.role,
+        actor: payload.granted_by || "admin",
+      });
       return res.json({ entitlement: { id: updated.id, ...updated.data() } });
     }
 
@@ -1438,16 +1542,29 @@ app.post("/api/v1/apps/:appId/entitlements", async (req, res) => {
       subject_id: payload.subject_id,
       subject_label: payload.subject_label || payload.subject_id,
       role: payload.role,
-      capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : [],
-      environments: payload.environments || appDoc.data().environments || [],
+      capabilities: Array.isArray(payload.capabilities)
+        ? payload.capabilities
+        : [],
+      environments: Array.isArray(payload.environments)
+        ? payload.environments
+        : [],
       granted_by: payload.granted_by || "admin",
       expires_at: payload.expires_at || null,
       created_at: now,
       updated_at: now,
     });
     const created = await docRef.get();
-    await writeAuditEntry({ action: "entitlement.granted", app_id: appId, subject_type: payload.subject_type, subject_id: payload.subject_id, role: payload.role, actor: payload.granted_by || "admin" });
-    res.status(201).json({ entitlement: { id: created.id, ...created.data() } });
+    await writeAuditEntry({
+      action: "entitlement.granted",
+      app_id: appId,
+      subject_type: payload.subject_type,
+      subject_id: payload.subject_id,
+      role: payload.role,
+      actor: payload.granted_by || "admin",
+    });
+    res
+      .status(201)
+      .json({ entitlement: { id: created.id, ...created.data() } });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
@@ -1461,11 +1578,20 @@ app.delete("/api/v1/apps/:appId/entitlements/:entId", async (req, res) => {
       return res.status(404).json({ error: "Entitlement not found." });
     }
     if (doc.data().app_id !== req.params.appId) {
-      return res.status(404).json({ error: "Entitlement does not belong to this app." });
+      return res
+        .status(404)
+        .json({ error: "Entitlement does not belong to this app." });
     }
     const entData = doc.data();
     await ref.delete();
-    await writeAuditEntry({ action: "entitlement.revoked", app_id: req.params.appId, subject_type: entData.subject_type, subject_id: entData.subject_id, role: entData.role, actor: "admin" });
+    await writeAuditEntry({
+      action: "entitlement.revoked",
+      app_id: req.params.appId,
+      subject_type: entData.subject_type,
+      subject_id: entData.subject_id,
+      role: entData.role,
+      actor: "admin",
+    });
     res.json({ revoked: true, id: req.params.entId });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -1506,21 +1632,28 @@ app.post("/api/v1/groups", async (req, res) => {
       return res.status(400).json({ error: "group_id and name are required." });
     }
     if (!/^[a-z0-9][a-z0-9_-]*$/.test(payload.group_id)) {
-      return res.status(400).json({ error: "group_id must be lowercase alphanumeric with hyphens/underscores." });
+      return res.status(400).json({
+        error:
+          "group_id must be lowercase alphanumeric with hyphens/underscores.",
+      });
     }
     const existing = await groupsCollection().doc(payload.group_id).get();
     if (existing.exists) {
-      return res.status(409).json({ error: "A group with this ID already exists." });
+      return res
+        .status(409)
+        .json({ error: "A group with this ID already exists." });
     }
     const now = new Date().toISOString();
-    await groupsCollection().doc(payload.group_id).set({
-      group_id: payload.group_id,
-      name: payload.name.trim(),
-      description: (payload.description || "").trim(),
-      members: [],
-      created_at: now,
-      updated_at: now,
-    });
+    await groupsCollection()
+      .doc(payload.group_id)
+      .set({
+        group_id: payload.group_id,
+        name: payload.name.trim(),
+        description: (payload.description || "").trim(),
+        members: [],
+        created_at: now,
+        updated_at: now,
+      });
     const created = await groupsCollection().doc(payload.group_id).get();
     res.status(201).json({ group: { id: created.id, ...created.data() } });
   } catch (error) {
@@ -1563,7 +1696,8 @@ app.delete("/api/v1/groups/:id", async (req, res) => {
       .get();
     if (!entSnapshot.empty) {
       return res.status(409).json({
-        error: "Group has active app entitlements. Revoke them before deleting.",
+        error:
+          "Group has active app entitlements. Revoke them before deleting.",
       });
     }
     await ref.delete();
@@ -1595,8 +1729,16 @@ app.post("/api/v1/groups/:id/members", async (req, res) => {
       email: payload.email || "",
       added_at: new Date().toISOString(),
     });
-    await ref.set({ members, updated_at: new Date().toISOString() }, { merge: true });
-    await writeAuditEntry({ action: "group.member_added", group_id: req.params.id, firebase_uid: payload.firebase_uid, actor: "admin" });
+    await ref.set(
+      { members, updated_at: new Date().toISOString() },
+      { merge: true },
+    );
+    await writeAuditEntry({
+      action: "group.member_added",
+      group_id: req.params.id,
+      firebase_uid: payload.firebase_uid,
+      actor: "admin",
+    });
     const updated = await ref.get();
     res.json({ group: { id: updated.id, ...updated.data() } });
   } catch (error) {
@@ -1615,8 +1757,16 @@ app.delete("/api/v1/groups/:id/members/:uid", async (req, res) => {
     const members = (data.members || []).filter(
       (m) => m.firebase_uid !== req.params.uid,
     );
-    await ref.set({ members, updated_at: new Date().toISOString() }, { merge: true });
-    await writeAuditEntry({ action: "group.member_removed", group_id: req.params.id, firebase_uid: req.params.uid, actor: "admin" });
+    await ref.set(
+      { members, updated_at: new Date().toISOString() },
+      { merge: true },
+    );
+    await writeAuditEntry({
+      action: "group.member_removed",
+      group_id: req.params.id,
+      firebase_uid: req.params.uid,
+      actor: "admin",
+    });
     const updated = await ref.get();
     res.json({ group: { id: updated.id, ...updated.data() } });
   } catch (error) {
@@ -1677,7 +1827,9 @@ app.get("/api/v1/users/:id/effective-access", async (req, res) => {
       const viaGroup = groupEntitlements.filter((e) => e.app_id === appId);
       const allGrants = [...direct, ...viaGroup];
       const roleRank = { owner: 4, admin: 3, editor: 2, viewer: 1 };
-      allGrants.sort((a, b) => (roleRank[b.role] || 0) - (roleRank[a.role] || 0));
+      allGrants.sort(
+        (a, b) => (roleRank[b.role] || 0) - (roleRank[a.role] || 0),
+      );
       const best = allGrants[0];
       const highestRole = best?.role;
       let capabilities = [];
@@ -1686,7 +1838,9 @@ app.get("/api/v1/users/:id/effective-access", async (req, res) => {
           capabilities = best.capabilities;
         } else {
           const presets = capMap[appId]?.role_presets || {};
-          capabilities = presets[highestRole] || (highestRole === "admin" || highestRole === "owner" ? ["*"] : []);
+          capabilities =
+            presets[highestRole] ||
+            (highestRole === "admin" || highestRole === "owner" ? ["*"] : []);
         }
       }
       return {
@@ -1754,7 +1908,9 @@ app.post("/api/v1/groups/:id/bulk-assign", async (req, res) => {
       return res.status(400).json({ error: "app_ids array is required." });
     }
     if (!["viewer", "editor", "admin", "owner"].includes(role)) {
-      return res.status(400).json({ error: "role must be viewer, editor, admin, or owner." });
+      return res
+        .status(400)
+        .json({ error: "role must be viewer, editor, admin, or owner." });
     }
     const now = new Date().toISOString();
     let created = 0;
@@ -1776,10 +1932,7 @@ app.post("/api/v1/groups/:id/bulk-assign", async (req, res) => {
           .get();
         if (!existing.empty) {
           const doc = existing.docs[0];
-          await doc.ref.set(
-            { role, updated_at: now },
-            { merge: true },
-          );
+          await doc.ref.set({ role, updated_at: now }, { merge: true });
           updated++;
         } else {
           await appEntitlementsCollection().add({
@@ -1788,7 +1941,7 @@ app.post("/api/v1/groups/:id/bulk-assign", async (req, res) => {
             subject_id: groupId,
             subject_label: groupData.name || groupId,
             role,
-            environments: appDoc.data().environments || [],
+            environments: [],
             granted_by: payload.granted_by || "admin",
             expires_at: null,
             created_at: now,
@@ -1796,7 +1949,14 @@ app.post("/api/v1/groups/:id/bulk-assign", async (req, res) => {
           });
           created++;
         }
-        await writeAuditEntry({ action: "entitlement.bulk_granted", app_id: appId, subject_type: "group", subject_id: groupId, role, actor: payload.granted_by || "admin" });
+        await writeAuditEntry({
+          action: "entitlement.bulk_granted",
+          app_id: appId,
+          subject_type: "group",
+          subject_id: groupId,
+          role,
+          actor: payload.granted_by || "admin",
+        });
       } catch (err) {
         errors.push(`${appId}: ${String(err)}`);
       }
@@ -1843,7 +2003,11 @@ app.put("/api/v1/apps/:appId/capabilities", async (req, res) => {
       return res.status(400).json({ error: "capabilities array is required." });
     }
     for (const cap of payload.capabilities) {
-      if (!cap.key || !cap.label || !["view", "control"].includes(cap.category)) {
+      if (
+        !cap.key ||
+        !cap.label ||
+        !["view", "control"].includes(cap.category)
+      ) {
         return res.status(400).json({
           error: `Invalid capability: each must have key, label, and category (view|control). Got: ${JSON.stringify(cap)}`,
         });
@@ -1853,11 +2017,20 @@ app.put("/api/v1/apps/:appId/capabilities", async (req, res) => {
     const data = {
       app_id: appId,
       capabilities: payload.capabilities,
-      role_presets: payload.role_presets || { viewer: [], editor: [], admin: ["*"], owner: ["*"] },
+      role_presets: payload.role_presets || {
+        viewer: [],
+        editor: [],
+        admin: ["*"],
+        owner: ["*"],
+      },
       updated_at: now,
     };
     await appCapabilitiesCollection().doc(appId).set(data);
-    await writeAuditEntry({ action: "capabilities.updated", app_id: appId, actor: "admin" });
+    await writeAuditEntry({
+      action: "capabilities.updated",
+      app_id: appId,
+      actor: "admin",
+    });
     res.json({ definition: data });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -1870,7 +2043,9 @@ app.get("/api/v1/authorize", async (req, res) => {
     const uid = String(req.query.uid || "");
     const env = String(req.query.env || "");
     if (!appId || !uid) {
-      return res.status(400).json({ error: "app_id and uid are required query parameters." });
+      return res
+        .status(400)
+        .json({ error: "app_id and uid are required query parameters." });
     }
 
     const groupSnapshot = await groupsCollection().get();
@@ -1894,10 +2069,18 @@ app.get("/api/v1/authorize", async (req, res) => {
 
     for (const doc of entSnapshot.docs) {
       const ent = doc.data();
-      const isDirectMatch = ent.subject_type === "user" && ent.subject_id === uid;
-      const isGroupMatch = ent.subject_type === "group" && userGroupIds.includes(ent.subject_id);
+      const isDirectMatch =
+        ent.subject_type === "user" && ent.subject_id === uid;
+      const isGroupMatch =
+        ent.subject_type === "group" && userGroupIds.includes(ent.subject_id);
       if (!isDirectMatch && !isGroupMatch) continue;
-      if (env && ent.environments && ent.environments.length > 0 && !ent.environments.includes(env)) continue;
+      if (
+        env &&
+        ent.environments &&
+        ent.environments.length > 0 &&
+        !ent.environments.includes(env)
+      )
+        continue;
 
       const rank = roleRank[ent.role] || 0;
       if (rank > bestRank) {
@@ -1919,7 +2102,11 @@ app.get("/api/v1/authorize", async (req, res) => {
       });
     }
 
-    const capabilities = await resolveCapabilities(appId, bestRole, bestCapabilities);
+    const capabilities = await resolveCapabilities(
+      appId,
+      bestRole,
+      bestCapabilities,
+    );
     res.json({
       authorized: true,
       role: bestRole,
@@ -2006,13 +2193,21 @@ app.post("/api/v1/settings/change-password", async (req, res) => {
   try {
     const { uid, newPassword } = req.body || {};
     if (!uid || !newPassword) {
-      return res.status(400).json({ error: "uid and newPassword are required." });
+      return res
+        .status(400)
+        .json({ error: "uid and newPassword are required." });
     }
     if (newPassword.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters." });
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 6 characters." });
     }
     await auth.updateUser(uid, { password: newPassword });
-    await writeAuditEntry({ action: "settings.password_changed", firebase_uid: uid, actor: uid });
+    await writeAuditEntry({
+      action: "settings.password_changed",
+      firebase_uid: uid,
+      actor: uid,
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2051,7 +2246,11 @@ app.get("/api/v1/admin/stats", async (_req, res) => {
     }));
 
     res.json({
-      users: { total: authUsers.users.length, active: activeUsers, disabled: disabledUsers },
+      users: {
+        total: authUsers.users.length,
+        active: activeUsers,
+        disabled: disabledUsers,
+      },
       apps: { total: appsSnap.size, with_capabilities: appsWithCaps },
       groups: { total: groupsSnap.size, total_members: totalMembers },
       entitlements: { total: entSnap.size },
@@ -2094,7 +2293,10 @@ app.post("/api/v1/github/discover", async (_req, res) => {
     let page = 1;
 
     const orgCheck = await fetch(`https://api.github.com/orgs/${owner}`, {
-      headers: { Authorization: `Bearer ${secrets.githubToken}`, Accept: "application/vnd.github+json" },
+      headers: {
+        Authorization: `Bearer ${secrets.githubToken}`,
+        Accept: "application/vnd.github+json",
+      },
     });
     const isOrg = orgCheck.ok;
     const listUrl = isOrg
@@ -2112,7 +2314,9 @@ app.post("/api/v1/github/discover", async (_req, res) => {
         },
       );
       if (!resp.ok) {
-        return res.status(502).json({ error: `GitHub API error: ${resp.status} ${await resp.text()}` });
+        return res.status(502).json({
+          error: `GitHub API error: ${resp.status} ${await resp.text()}`,
+        });
       }
       const repos = await resp.json();
       if (!Array.isArray(repos) || repos.length === 0) break;
@@ -2176,8 +2380,10 @@ app.get("/api/v1/github/assignments", async (req, res) => {
     const uid = req.query.uid;
     const repo = req.query.repo;
     let query = githubAssignmentsCollection().orderBy("created_at", "desc");
-    if (uid) query = githubAssignmentsCollection().where("firebase_uid", "==", uid);
-    if (repo) query = githubAssignmentsCollection().where("repo_full_name", "==", repo);
+    if (uid)
+      query = githubAssignmentsCollection().where("firebase_uid", "==", uid);
+    if (repo)
+      query = githubAssignmentsCollection().where("repo_full_name", "==", repo);
     const snapshot = await query.get();
     const assignments = snapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -2192,7 +2398,9 @@ app.get("/api/v1/github/access-scan", async (req, res) => {
   try {
     const githubHandle = String(req.query.github_handle || "").trim();
     if (!githubHandle) {
-      return res.status(400).json({ error: "github_handle query param is required." });
+      return res
+        .status(400)
+        .json({ error: "github_handle query param is required." });
     }
 
     const secrets = await loadProviderSecrets();
@@ -2228,12 +2436,15 @@ app.get("/api/v1/github/access-scan", async (req, res) => {
           return;
         }
         if (!permissionResp.ok) {
-          errors.push(`${repo.full_name}: ${permissionResp.status} ${await permissionResp.text()}`);
+          errors.push(
+            `${repo.full_name}: ${permissionResp.status} ${await permissionResp.text()}`,
+          );
           return;
         }
 
         const permissionData = await permissionResp.json();
-        const permission = permissionData.role_name || permissionData.permission || "unknown";
+        const permission =
+          permissionData.role_name || permissionData.permission || "unknown";
         if (permission === "none") {
           return;
         }
@@ -2245,7 +2456,9 @@ app.get("/api/v1/github/access-scan", async (req, res) => {
       await Promise.all(checks);
     }
 
-    accessible_repos.sort((a, b) => a.repo_full_name.localeCompare(b.repo_full_name));
+    accessible_repos.sort((a, b) =>
+      a.repo_full_name.localeCompare(b.repo_full_name),
+    );
     res.json({
       github_handle: githubHandle,
       scanned_total: repos.length,
@@ -2261,11 +2474,21 @@ app.get("/api/v1/github/access-scan", async (req, res) => {
 app.post("/api/v1/github/assignments", async (req, res) => {
   try {
     const payload = req.body || {};
-    if (!payload.firebase_uid || !payload.github_handle || !payload.repo_full_name || !payload.role) {
-      return res.status(400).json({ error: "firebase_uid, github_handle, repo_full_name, and role are required." });
+    if (
+      !payload.firebase_uid ||
+      !payload.github_handle ||
+      !payload.repo_full_name ||
+      !payload.role
+    ) {
+      return res.status(400).json({
+        error:
+          "firebase_uid, github_handle, repo_full_name, and role are required.",
+      });
     }
     if (!GITHUB_ROLES.includes(payload.role)) {
-      return res.status(400).json({ error: `role must be one of: ${GITHUB_ROLES.join(", ")}` });
+      return res
+        .status(400)
+        .json({ error: `role must be one of: ${GITHUB_ROLES.join(", ")}` });
     }
 
     const secrets = await loadProviderSecrets();
@@ -2288,7 +2511,9 @@ app.post("/api/v1/github/assignments", async (req, res) => {
     );
     if (!ghResp.ok && ghResp.status !== 204) {
       const body = await ghResp.text();
-      return res.status(502).json({ error: `GitHub collaborator add failed: ${ghResp.status} ${body}` });
+      return res.status(502).json({
+        error: `GitHub collaborator add failed: ${ghResp.status} ${body}`,
+      });
     }
 
     const now = new Date().toISOString();
@@ -2301,7 +2526,11 @@ app.post("/api/v1/github/assignments", async (req, res) => {
     if (!existing.empty) {
       const doc = existing.docs[0];
       await doc.ref.set(
-        { role: payload.role, github_handle: payload.github_handle, updated_at: now },
+        {
+          role: payload.role,
+          github_handle: payload.github_handle,
+          updated_at: now,
+        },
         { merge: true },
       );
       const updated = await doc.ref.get();

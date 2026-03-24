@@ -60,11 +60,7 @@ const ROLE_OPTIONS: UserRole[] = [
   "investor",
 ];
 
-const ROLES_WITH_GITHUB: UserRole[] = [
-  "admin",
-  "internal",
-  "collaborator",
-];
+const ROLES_WITH_GITHUB: UserRole[] = ["admin", "internal", "collaborator"];
 
 function stepIcon(status: ProvisioningStep["status"]) {
   switch (status) {
@@ -95,7 +91,8 @@ export default function OnboardPage() {
   const [steps, setSteps] = React.useState<ProvisioningStep[]>([]);
   const [submitted, setSubmitted] = React.useState(false);
 
-  const [quotaWarning, setQuotaWarning] = React.useState<QuotaCheckResult | null>(null);
+  const [quotaWarning, setQuotaWarning] =
+    React.useState<QuotaCheckResult | null>(null);
   const [showQuotaDialog, setShowQuotaDialog] = React.useState(false);
 
   React.useEffect(() => {

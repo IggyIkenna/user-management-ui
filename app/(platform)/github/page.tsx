@@ -75,12 +75,28 @@ import type {
   Person,
 } from "@/lib/api/types";
 
-const ROLE_OPTIONS: { value: GitHubRepoRole; label: string; description: string }[] = [
+const ROLE_OPTIONS: {
+  value: GitHubRepoRole;
+  label: string;
+  description: string;
+}[] = [
   { value: "pull", label: "Read", description: "Can read and clone" },
-  { value: "triage", label: "Triage", description: "Can manage issues and PRs" },
+  {
+    value: "triage",
+    label: "Triage",
+    description: "Can manage issues and PRs",
+  },
   { value: "push", label: "Write", description: "Can push to branches" },
-  { value: "maintain", label: "Maintain", description: "Can manage without admin" },
-  { value: "admin", label: "Admin", description: "Full access including settings" },
+  {
+    value: "maintain",
+    label: "Maintain",
+    description: "Can manage without admin",
+  },
+  {
+    value: "admin",
+    label: "Admin",
+    description: "Full access including settings",
+  },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
@@ -94,7 +110,9 @@ const ROLE_COLORS: Record<string, string> = {
 export default function GitHubPage() {
   const { user: authUser } = useAuth();
   const [repos, setRepos] = React.useState<GitHubRepo[]>([]);
-  const [assignments, setAssignments] = React.useState<GitHubRepoAssignment[]>([]);
+  const [assignments, setAssignments] = React.useState<GitHubRepoAssignment[]>(
+    [],
+  );
   const [users, setUsers] = React.useState<Person[]>([]);
   const [reposLoading, setReposLoading] = React.useState(true);
   const [assignLoading, setAssignLoading] = React.useState(true);
@@ -103,7 +121,9 @@ export default function GitHubPage() {
   const [search, setSearch] = React.useState("");
   const [assignmentUserFilter, setAssignmentUserFilter] = React.useState("all");
   const [showAccessibleOnly, setShowAccessibleOnly] = React.useState(false);
-  const [actualAccessRepos, setActualAccessRepos] = React.useState<Set<string>>(new Set());
+  const [actualAccessRepos, setActualAccessRepos] = React.useState<Set<string>>(
+    new Set(),
+  );
   const [actualAccessLoading, setActualAccessLoading] = React.useState(false);
   const [actualAccessError, setActualAccessError] = React.useState("");
   const [actualAccessCount, setActualAccessCount] = React.useState(0);
@@ -117,7 +137,8 @@ export default function GitHubPage() {
   const [granting, setGranting] = React.useState(false);
   const [grantError, setGrantError] = React.useState("");
 
-  const [revokeTarget, setRevokeTarget] = React.useState<GitHubRepoAssignment | null>(null);
+  const [revokeTarget, setRevokeTarget] =
+    React.useState<GitHubRepoAssignment | null>(null);
   const [revoking, setRevoking] = React.useState(false);
 
   const fetchRepos = React.useCallback(async () => {
@@ -195,7 +216,9 @@ export default function GitHubPage() {
       setActualAccessRepos(new Set());
       setActualAccessCount(0);
       setActualAccessError(
-        err instanceof Error ? err.message : "Failed to scan actual GitHub access.",
+        err instanceof Error
+          ? err.message
+          : "Failed to scan actual GitHub access.",
       );
     } finally {
       setActualAccessLoading(false);
@@ -211,10 +234,14 @@ export default function GitHubPage() {
     setDiscoverResult("");
     try {
       const res = await discoverRepos();
-      setDiscoverResult(`Discovered ${res.data.total} repos from ${res.data.org}`);
+      setDiscoverResult(
+        `Discovered ${res.data.total} repos from ${res.data.org}`,
+      );
       await fetchRepos();
     } catch (err) {
-      setDiscoverResult(err instanceof Error ? err.message : "Discovery failed");
+      setDiscoverResult(
+        err instanceof Error ? err.message : "Discovery failed",
+      );
     } finally {
       setDiscovering(false);
     }
@@ -269,13 +296,10 @@ export default function GitHubPage() {
     return assignments.filter((a) => a.firebase_uid === assignmentUserFilter);
   }, [assignments, assignmentUserFilter]);
 
-  const accessibleRepoNames = React.useMemo(
-    () => {
-      const fromAssignments = filteredAssignments.map((a) => a.repo_full_name);
-      return new Set([...fromAssignments, ...actualAccessRepos]);
-    },
-    [filteredAssignments, actualAccessRepos],
-  );
+  const accessibleRepoNames = React.useMemo(() => {
+    const fromAssignments = filteredAssignments.map((a) => a.repo_full_name);
+    return new Set([...fromAssignments, ...actualAccessRepos]);
+  }, [filteredAssignments, actualAccessRepos]);
 
   const filteredRepos = repos.filter((r) => {
     if (showAccessibleOnly && !accessibleRepoNames.has(r.full_name)) {
@@ -305,8 +329,14 @@ export default function GitHubPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleDiscover} disabled={discovering}>
-            <RefreshCw className={`mr-2 size-4 ${discovering ? "animate-spin" : ""}`} />
+          <Button
+            variant="outline"
+            onClick={handleDiscover}
+            disabled={discovering}
+          >
+            <RefreshCw
+              className={`mr-2 size-4 ${discovering ? "animate-spin" : ""}`}
+            />
             {discovering ? "Discovering..." : "Discover Repos"}
           </Button>
           <Dialog open={grantOpen} onOpenChange={setGrantOpen}>
@@ -338,7 +368,10 @@ export default function GitHubPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {usersWithGitHub.map((u) => (
-                          <SelectItem key={u.firebase_uid} value={u.firebase_uid}>
+                          <SelectItem
+                            key={u.firebase_uid}
+                            value={u.firebase_uid}
+                          >
                             {u.name} (@{u.github_handle})
                           </SelectItem>
                         ))}
@@ -372,7 +405,10 @@ export default function GitHubPage() {
                     <Select
                       value={grantForm.role}
                       onValueChange={(v) =>
-                        setGrantForm((f) => ({ ...f, role: v as GitHubRepoRole }))
+                        setGrantForm((f) => ({
+                          ...f,
+                          role: v as GitHubRepoRole,
+                        }))
                       }
                     >
                       <SelectTrigger>
@@ -444,7 +480,9 @@ export default function GitHubPage() {
                   onClick={refreshActualAccess}
                   disabled={actualAccessLoading}
                 >
-                  {actualAccessLoading ? "Checking GitHub..." : "Refresh Actual Access"}
+                  {actualAccessLoading
+                    ? "Checking GitHub..."
+                    : "Refresh Actual Access"}
                 </Button>
               )}
               <Badge variant="secondary">
@@ -522,7 +560,9 @@ export default function GitHubPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Discovered Repositories</CardTitle>
+              <CardTitle className="text-base">
+                Discovered Repositories
+              </CardTitle>
               <CardDescription>
                 Repos the platform token has access to in the org
               </CardDescription>
@@ -534,7 +574,9 @@ export default function GitHubPage() {
                 className="h-8"
                 onClick={() => setShowAccessibleOnly((prev) => !prev)}
               >
-                {showAccessibleOnly ? "Showing Accessible Repos" : "Show Accessible Repos Only"}
+                {showAccessibleOnly
+                  ? "Showing Accessible Repos"
+                  : "Show Accessible Repos Only"}
               </Button>
               <Input
                 placeholder="Filter repos..."
@@ -588,17 +630,25 @@ export default function GitHubPage() {
                             {repo.language}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">---</span>
+                          <span className="text-xs text-muted-foreground">
+                            ---
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
                         {repo.private ? (
-                          <Badge variant="outline" className="text-xs border-amber-600/30 text-amber-400">
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-amber-600/30 text-amber-400"
+                          >
                             <Lock className="size-3 mr-1" />
                             Private
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-xs border-emerald-600/30 text-emerald-400">
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-emerald-600/30 text-emerald-400"
+                          >
                             <Globe className="size-3 mr-1" />
                             Public
                           </Badge>
@@ -606,7 +656,10 @@ export default function GitHubPage() {
                       </TableCell>
                       <TableCell>
                         {repo.archived ? (
-                          <Badge variant="outline" className="text-xs text-zinc-400">
+                          <Badge
+                            variant="outline"
+                            className="text-xs text-zinc-400"
+                          >
                             <Archive className="size-3 mr-1" />
                             Archived
                           </Badge>
@@ -637,7 +690,8 @@ export default function GitHubPage() {
             <AlertDialogTitle>Revoke repo access?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove @{revokeTarget?.github_handle} as a collaborator
-              on {revokeTarget?.repo_full_name}. This calls the GitHub API directly.
+              on {revokeTarget?.repo_full_name}. This calls the GitHub API
+              directly.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

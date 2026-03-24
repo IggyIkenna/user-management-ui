@@ -25,5 +25,9 @@ export async function updateApplication(
 }
 
 export async function listSyncHistory() {
-  return apiClient.get<{ runs: ApplicationSyncHistoryEntry[]; history?: ApplicationSyncHistoryEntry[]; total: number }>("/apps/sync-history");
+  return apiClient.get<{
+    runs: ApplicationSyncHistoryEntry[];
+    history?: ApplicationSyncHistoryEntry[];
+    total: number;
+  }>("/apps/sync-history");
 }

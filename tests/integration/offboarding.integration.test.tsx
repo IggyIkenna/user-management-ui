@@ -47,7 +47,11 @@ describe("OffboardUserPage integration", () => {
   });
 
   it("sends provider actions including firebase delete/deactivate choices", async () => {
-    renderWithProviders(<OffboardUserPage />, "/users/usr-1/offboard", "/users/:id/offboard");
+    renderWithProviders(
+      <OffboardUserPage />,
+      "/users/usr-1/offboard",
+      "/users/:id/offboard",
+    );
 
     await screen.findByText("Offboard Jane Offboard");
     const selects = screen.getAllByRole("combobox");

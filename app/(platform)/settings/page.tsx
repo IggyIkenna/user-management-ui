@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, User, Mail, Shield, Key, Pencil, Lock, Check } from "lucide-react";
+import {
+  LogOut,
+  User,
+  Mail,
+  Shield,
+  Key,
+  Pencil,
+  Lock,
+  Check,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +58,9 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = React.useState("");
   const [passwordSuccess, setPasswordSuccess] = React.useState(false);
 
-  const [effectiveAccess, setEffectiveAccess] = React.useState<EffectiveAccessEntry[]>([]);
+  const [effectiveAccess, setEffectiveAccess] = React.useState<
+    EffectiveAccessEntry[]
+  >([]);
   const [accessLoading, setAccessLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -108,7 +119,9 @@ export default function SettingsPage() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : "Failed to change password");
+      setPasswordError(
+        err instanceof Error ? err.message : "Failed to change password",
+      );
     } finally {
       setPasswordSaving(false);
     }
@@ -164,16 +177,32 @@ export default function SettingsPage() {
                           onChange={(e) => setNewName(e.target.value)}
                           className="h-7 text-sm"
                         />
-                        <Button size="sm" className="h-7" onClick={handleNameSave} disabled={nameSaving}>
-                          {nameSaving ? <Spinner className="size-3" /> : <Check className="size-3" />}
+                        <Button
+                          size="sm"
+                          className="h-7"
+                          onClick={handleNameSave}
+                          disabled={nameSaving}
+                        >
+                          {nameSaving ? (
+                            <Spinner className="size-3" />
+                          ) : (
+                            <Check className="size-3" />
+                          )}
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingName(false)}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7"
+                          onClick={() => setEditingName(false)}
+                        >
                           Cancel
                         </Button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{nameSuccess ? newName : user.displayName}</p>
+                        <p className="text-sm font-medium">
+                          {nameSuccess ? newName : user.displayName}
+                        </p>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -201,7 +230,9 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Role</p>
-                    <p className="text-sm font-medium capitalize">{user.role}</p>
+                    <p className="text-sm font-medium capitalize">
+                      {user.role}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -209,7 +240,9 @@ export default function SettingsPage() {
                     <Key className="size-4 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Firebase UID</p>
+                    <p className="text-xs text-muted-foreground">
+                      Firebase UID
+                    </p>
                     <p className="text-sm font-mono text-muted-foreground">
                       {user.firebase_uid}
                     </p>
@@ -231,9 +264,7 @@ export default function SettingsPage() {
             <Lock className="size-4" />
             Security
           </CardTitle>
-          <CardDescription>
-            Change your password
-          </CardDescription>
+          <CardDescription>Change your password</CardDescription>
         </CardHeader>
         <CardContent>
           {changingPassword ? (
@@ -262,7 +293,11 @@ export default function SettingsPage() {
                 </p>
               )}
               <div className="flex gap-2">
-                <Button size="sm" onClick={handlePasswordChange} disabled={passwordSaving}>
+                <Button
+                  size="sm"
+                  onClick={handlePasswordChange}
+                  disabled={passwordSaving}
+                >
                   {passwordSaving ? "Saving..." : "Update Password"}
                 </Button>
                 <Button
@@ -281,7 +316,11 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <Button size="sm" variant="outline" onClick={() => setChangingPassword(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setChangingPassword(true)}
+              >
                 <Lock className="mr-2 size-3.5" />
                 Change Password
               </Button>
@@ -316,9 +355,13 @@ export default function SettingsPage() {
                 >
                   <div>
                     <p className="text-sm font-medium">{entry.app_name}</p>
-                    <p className="text-xs text-muted-foreground">{entry.app_category}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.app_category}
+                    </p>
                   </div>
-                  <Badge className={ROLE_COLORS[entry.effective_role] || "bg-muted"}>
+                  <Badge
+                    className={ROLE_COLORS[entry.effective_role] || "bg-muted"}
+                  >
                     {entry.effective_role}
                   </Badge>
                 </div>
@@ -333,9 +376,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Session</CardTitle>
-          <CardDescription>
-            Manage your current session
-          </CardDescription>
+          <CardDescription>Manage your current session</CardDescription>
         </CardHeader>
         <CardContent>
           <AlertDialog>
@@ -354,7 +395,9 @@ export default function SettingsPage() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleLogout}>Logout</AlertDialogAction>
+                <AlertDialogAction onClick={handleLogout}>
+                  Logout
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

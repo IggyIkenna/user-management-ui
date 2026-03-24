@@ -61,7 +61,8 @@ export async function loadProviderSecrets() {
     msClientSecret: msClientSecret || process.env.MS_GRAPH_CLIENT_SECRET || "",
     portalToken: portalToken || process.env.PORTAL_SERVICE_TOKEN || "",
     awsAccessKeyId: awsAccessKeyId || process.env.AWS_ACCESS_KEY_ID || "",
-    awsSecretAccessKey: awsSecretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || "",
+    awsSecretAccessKey:
+      awsSecretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || "",
     awsSessionToken: awsSessionToken || process.env.AWS_SESSION_TOKEN || "",
   };
 }

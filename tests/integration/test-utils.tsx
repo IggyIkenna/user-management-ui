@@ -20,7 +20,10 @@ export function renderWithProviders(
       <MemoryRouter initialEntries={[initialRoute]}>
         <Routes>
           <Route path={routePath} element={ui as ReactElement} />
-          <Route path="*" element={<div data-testid="fallback-route">fallback</div>} />
+          <Route
+            path="*"
+            element={<div data-testid="fallback-route">fallback</div>}
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

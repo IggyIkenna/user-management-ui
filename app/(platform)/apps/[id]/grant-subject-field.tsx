@@ -55,7 +55,8 @@ export function GrantSubjectField({
           if (!cancelled) setGroups(res.data.groups ?? []);
         }
       } catch {
-        if (!cancelled) setLoadError("Could not load directory. Use manual ID entry below.");
+        if (!cancelled)
+          setLoadError("Could not load directory. Use manual ID entry below.");
       }
     })();
     return () => {
@@ -147,9 +148,7 @@ export function GrantSubjectField({
   return (
     <div ref={containerRef} className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>
-          {subjectType === "user" ? "User" : "Group"}
-        </Label>
+        <Label>{subjectType === "user" ? "User" : "Group"}</Label>
         <Button
           type="button"
           variant="ghost"
@@ -163,10 +162,15 @@ export function GrantSubjectField({
 
       {subjectId ? (
         <div className="flex items-center gap-2 rounded-md border px-3 py-2">
-          <Badge variant="secondary" className="font-normal truncate max-w-[220px]">
+          <Badge
+            variant="secondary"
+            className="font-normal truncate max-w-[220px]"
+          >
             {subjectLabel || subjectId}
           </Badge>
-          <span className="text-xs text-muted-foreground font-mono truncate">{subjectId}</span>
+          <span className="text-xs text-muted-foreground font-mono truncate">
+            {subjectId}
+          </span>
           <Button
             type="button"
             variant="ghost"
@@ -195,7 +199,9 @@ export function GrantSubjectField({
             autoComplete="off"
           />
           {loadError && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">{loadError}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              {loadError}
+            </p>
           )}
           {open && !loadError && (
             <div className="rounded-md border bg-popover shadow-md z-50">
@@ -214,8 +220,12 @@ export function GrantSubjectField({
                           className="w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                           onClick={() => pickUser(u)}
                         >
-                          <div className="font-medium truncate">{u.name || u.email}</div>
-                          <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                          <div className="font-medium truncate">
+                            {u.name || u.email}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {u.email}
+                          </div>
                         </button>
                       ))
                     )

@@ -15,9 +15,7 @@ describe("Provider failure integration paths", () => {
     process.env.PORTAL_SERVICE_TOKEN = "";
   });
 
-  it(
-    "returns failed steps when provider credentials are unavailable",
-    async () => {
+  it("returns failed steps when provider credentials are unavailable", async () => {
     const steps = await runProviderProvisioning({
       role: "admin",
       email: "integration@test.com",
@@ -33,7 +31,5 @@ describe("Provider failure integration paths", () => {
     expect(byService.microsoft365.status).toBe("failed");
     expect(byService.gcp.status).toBe("failed");
     expect(byService.aws.status).toBe("failed");
-    },
-    20000,
-  );
+  }, 20000);
 });

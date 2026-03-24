@@ -58,7 +58,8 @@ export function CapabilitiesTab({ appId }: Props) {
 
   const [newKey, setNewKey] = React.useState("");
   const [newLabel, setNewLabel] = React.useState("");
-  const [newCategory, setNewCategory] = React.useState<CapabilityCategory>("view");
+  const [newCategory, setNewCategory] =
+    React.useState<CapabilityCategory>("view");
   const [seeding, setSeeding] = React.useState(false);
 
   const fetchCapabilities = React.useCallback(async () => {
@@ -134,7 +135,9 @@ export function CapabilitiesTab({ appId }: Props) {
     try {
       await seedCapabilities();
       await fetchCapabilities();
-      setSuccess("Imported capability definitions from server seed file for all applications.");
+      setSuccess(
+        "Imported capability definitions from server seed file for all applications.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Seed import failed");
     } finally {
@@ -162,44 +165,66 @@ export function CapabilitiesTab({ appId }: Props) {
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground py-8 text-center">Loading capabilities...</p>;
+    return (
+      <p className="text-sm text-muted-foreground py-8 text-center">
+        Loading capabilities...
+      </p>
+    );
   }
 
   if (!definition) {
-    return <p className="text-sm text-destructive">Failed to load capability definition.</p>;
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load capability definition.
+      </p>
+    );
   }
 
   const viewCaps = definition.capabilities.filter((c) => c.category === "view");
-  const controlCaps = definition.capabilities.filter((c) => c.category === "control");
+  const controlCaps = definition.capabilities.filter(
+    (c) => c.category === "control",
+  );
 
   return (
     <div className="space-y-6">
       {error && (
-        <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>
+        <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+          {error}
+        </p>
       )}
       {success && (
-        <p className="text-sm text-emerald-400 bg-emerald-600/10 rounded-md px-3 py-2">{success}</p>
+        <p className="text-sm text-emerald-400 bg-emerald-600/10 rounded-md px-3 py-2">
+          {success}
+        </p>
       )}
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Defined Capabilities</CardTitle>
           <CardDescription>
-            Feature keys returned by <code className="text-xs">/api/v1/authorize</code> for
-            this app. Grouped as view (read) vs control (actions). The Applications list only
-            shows app metadata; open this tab on an app to see roles and capabilities.
+            Feature keys returned by{" "}
+            <code className="text-xs">/api/v1/authorize</code> for this app.
+            Grouped as view (read) vs control (actions). The Applications list
+            only shows app metadata; open this tab on an app to see roles and
+            capabilities.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {definition.capabilities.length === 0 ? (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
               <p className="text-sm text-muted-foreground">
-                Nothing is stored in Firestore for this app yet, so the grant dialog cannot
-                offer capability overrides. Import the bundled seed (updates{" "}
-                <strong className="text-foreground">all</strong> apps) or add keys manually
-                below.
+                Nothing is stored in Firestore for this app yet, so the grant
+                dialog cannot offer capability overrides. Import the bundled
+                seed (updates <strong className="text-foreground">all</strong>{" "}
+                apps) or add keys manually below.
               </p>
-              <Button type="button" variant="secondary" size="sm" onClick={importFromSeed} disabled={seeding}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={importFromSeed}
+                disabled={seeding}
+              >
                 {seeding ? "Importing…" : "Import defaults from seed file"}
               </Button>
             </div>
@@ -212,7 +237,11 @@ export function CapabilitiesTab({ appId }: Props) {
                   </h4>
                   <div className="space-y-1">
                     {viewCaps.map((cap) => (
-                      <CapRow key={cap.key} cap={cap} onRemove={removeCapability} />
+                      <CapRow
+                        key={cap.key}
+                        cap={cap}
+                        onRemove={removeCapability}
+                      />
                     ))}
                   </div>
                 </div>
@@ -224,7 +253,11 @@ export function CapabilitiesTab({ appId }: Props) {
                   </h4>
                   <div className="space-y-1">
                     {controlCaps.map((cap) => (
-                      <CapRow key={cap.key} cap={cap} onRemove={removeCapability} />
+                      <CapRow
+                        key={cap.key}
+                        cap={cap}
+                        onRemove={removeCapability}
+                      />
                     ))}
                   </div>
                 </div>
@@ -255,7 +288,10 @@ export function CapabilitiesTab({ appId }: Props) {
             </div>
             <div className="w-28 space-y-1">
               <Label className="text-xs">Category</Label>
-              <Select value={newCategory} onValueChange={(v) => setNewCategory(v as CapabilityCategory)}>
+              <Select
+                value={newCategory}
+                onValueChange={(v) => setNewCategory(v as CapabilityCategory)}
+              >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue />
                 </SelectTrigger>
@@ -265,7 +301,12 @@ export function CapabilitiesTab({ appId }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" variant="secondary" onClick={addCapability} disabled={!newKey.trim() || !newLabel.trim()}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={addCapability}
+              disabled={!newKey.trim() || !newLabel.trim()}
+            >
               <Plus className="size-3.5 mr-1" />
               Add
             </Button>
@@ -278,8 +319,9 @@ export function CapabilitiesTab({ appId }: Props) {
           <CardHeader>
             <CardTitle className="text-base">Role Presets</CardTitle>
             <CardDescription>
-              Which capabilities does each role include by default? When granting access
-              with a role, these capabilities are applied unless explicitly overridden.
+              Which capabilities does each role include by default? When
+              granting access with a role, these capabilities are applied unless
+              explicitly overridden.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -316,11 +358,15 @@ export function CapabilitiesTab({ appId }: Props) {
                       {ROLES.map((role) => (
                         <TableCell key={role} className="text-center">
                           {role === "admin" || role === "owner" ? (
-                            <Badge variant="secondary" className="text-[10px]">all</Badge>
+                            <Badge variant="secondary" className="text-[10px]">
+                              all
+                            </Badge>
                           ) : (
                             <Checkbox
                               checked={isPresetChecked(role, cap.key)}
-                              onCheckedChange={() => togglePreset(role, cap.key)}
+                              onCheckedChange={() =>
+                                togglePreset(role, cap.key)
+                              }
                             />
                           )}
                         </TableCell>
@@ -353,7 +399,9 @@ function CapRow({
   return (
     <div className="flex items-center justify-between rounded-md border px-3 py-1.5">
       <div className="flex items-center gap-2">
-        <code className="text-xs font-mono text-muted-foreground">{cap.key}</code>
+        <code className="text-xs font-mono text-muted-foreground">
+          {cap.key}
+        </code>
         <span className="text-sm">{cap.label}</span>
       </div>
       <Button

@@ -19,15 +19,20 @@ export async function getUser(id: string) {
   return apiClient.get<{ user: Person }>(`/users/${id}`);
 }
 
-export async function checkOnboardQuota(payload: Pick<OnboardRequest, "email" | "role">) {
-  return apiClient.post<{ quota: QuotaCheckResult }>("/users/quota-check", payload);
+export async function checkOnboardQuota(
+  payload: Pick<OnboardRequest, "email" | "role">,
+) {
+  return apiClient.post<{ quota: QuotaCheckResult }>(
+    "/users/quota-check",
+    payload,
+  );
 }
 
 export async function onboardUser(req: OnboardRequest) {
-  return apiClient.post<{ user: Person; provisioning_steps: ProvisioningStep[] }>(
-    "/users/onboard",
-    req,
-  );
+  return apiClient.post<{
+    user: Person;
+    provisioning_steps: ProvisioningStep[];
+  }>("/users/onboard", req);
 }
 
 export async function modifyUser(id: string, req: ModifyUserRequest) {
@@ -50,13 +55,18 @@ export async function reprovisionUser(id: string) {
 }
 
 export async function listUserWorkflowRuns(id: string) {
-  return apiClient.get<{ runs: WorkflowRun[]; total: number }>(`/users/${id}/workflows`);
+  return apiClient.get<{ runs: WorkflowRun[]; total: number }>(
+    `/users/${id}/workflows`,
+  );
 }
 
 export async function getWorkflowExecutionStatus(executionName: string) {
-  return apiClient.get<{ execution: WorkflowExecution }>("/workflows/execution", {
-    params: { name: executionName },
-  });
+  return apiClient.get<{ execution: WorkflowExecution }>(
+    "/workflows/execution",
+    {
+      params: { name: executionName },
+    },
+  );
 }
 
 export async function getEffectiveAccess(id: string) {

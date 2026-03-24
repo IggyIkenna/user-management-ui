@@ -36,7 +36,9 @@ describe("OnboardUserPage integration", () => {
     mockOnboardUser.mockResolvedValue({
       data: {
         user: { id: "usr-1" },
-        provisioning_steps: [{ service: "firebase", label: "Firebase", status: "success" }],
+        provisioning_steps: [
+          { service: "firebase", label: "Firebase", status: "success" },
+        ],
       },
     });
 
@@ -55,7 +57,9 @@ describe("OnboardUserPage integration", () => {
       expect(mockCheckOnboardQuota).toHaveBeenCalled();
       expect(mockOnboardUser).toHaveBeenCalled();
     });
-    expect(await screen.findByText("Provisioning Complete")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Provisioning Complete"),
+    ).toBeInTheDocument();
   });
 
   it("shows failure when quota blocks onboarding", async () => {
@@ -81,7 +85,9 @@ describe("OnboardUserPage integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Onboard User" }));
 
     expect(
-      await screen.findByText("Provisioning blocked: required service quota is exhausted."),
+      await screen.findByText(
+        "Provisioning blocked: required service quota is exhausted.",
+      ),
     ).toBeInTheDocument();
     expect(mockOnboardUser).not.toHaveBeenCalled();
   });
