@@ -3,7 +3,7 @@ runConfig:
   memoryMiB: 1024
 
 scripts:
-  runCommand: sh -c "node server/index.js & npx next start -p ${PORT:-8080}"
+  runCommand: sh -c "PORT=8017 node server/index.js & npx next start -p ${PORT:-8080}"
 
 outputFiles:
   serverApp:
