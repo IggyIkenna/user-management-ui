@@ -22,8 +22,6 @@ import {
   Server,
   Globe,
   Lock,
-  Download,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +66,6 @@ import {
 import {
   listUserDocuments,
   reviewDocument,
-  getDocumentDownloadUrl,
   type UserDocument,
 } from "@/lib/api/onboarding-requests";
 import { changePassword } from "@/lib/api/settings";
@@ -165,32 +162,11 @@ export default function UserDetailPage() {
   const [error, setError] = React.useState("");
   const [reprovisioning, setReprovisioning] = React.useState(false);
 
-  const [downloadingDocId, setDownloadingDocId] = React.useState<string | null>(
-    null,
-  );
-
   const [adminNewPassword, setAdminNewPassword] = React.useState("");
   const [adminConfirmPassword, setAdminConfirmPassword] = React.useState("");
   const [adminPasswordSaving, setAdminPasswordSaving] = React.useState(false);
   const [adminPasswordError, setAdminPasswordError] = React.useState("");
   const [adminPasswordSuccess, setAdminPasswordSuccess] = React.useState(false);
-  const [workEmailLocalPart, setWorkEmailLocalPart] = React.useState("");
-  const [issuingWorkEmail, setIssuingWorkEmail] = React.useState(false);
-  const [workEmailMessage, setWorkEmailMessage] = React.useState("");
-  const [m365AccountActionLoading, setM365AccountActionLoading] =
-    React.useState(false);
-  const [m365LicensesLoading, setM365LicensesLoading] = React.useState(false);
-  const [m365ActionMessage, setM365ActionMessage] = React.useState("");
-  const [m365Licenses, setM365Licenses] = React.useState<
-    Microsoft365LicenseItem[]
-  >([]);
-  const [selectedM365Licenses, setSelectedM365Licenses] = React.useState<
-    Record<Microsoft365LicenseKey, boolean>
-  >({
-    power_automate: true,
-    exchange_online: true,
-    microsoft_365_business_premium: true,
-  });
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -274,24 +250,6 @@ export default function UserDetailPage() {
     }
   };
 
-  async function handleDocDownload(docId: string) {
-    setDownloadingDocId(docId);
-    const newTab = window.open("about:blank", "_blank");
-    try {
-      const res = await getDocumentDownloadUrl(userId, docId);
-      if (newTab) {
-        newTab.location.href = res.data.url;
-      } else {
-        window.location.assign(res.data.url);
-      }
-    } catch {
-      if (newTab) newTab.close();
-      setError("Failed to get download link.");
-    } finally {
-      setDownloadingDocId(null);
-    }
-  }
-
   const showAdminPasswordCard =
     isAdmin() &&
     sessionUser &&
@@ -322,150 +280,6 @@ export default function UserDetailPage() {
       );
     } finally {
       setAdminPasswordSaving(false);
-    }
-  }
-
-  async function handleIssueWorkEmail() {
-    if (!user) return;
-    setError("");
-    setWorkEmailMessage("");
-    setIssuingWorkEmail(true);
-    const normalized = workEmailLocalPart.trim().toLowerCase();
-    if (!normalized) {
-      setIssuingWorkEmail(false);
-      setError("Work email local part is required.");
-      return;
-    }
-    if (!/^[a-z0-9._-]+$/.test(normalized)) {
-      setIssuingWorkEmail(false);
-      setError("Work email local part may only contain a-z, 0-9, ., _, and -.");
-      return;
-    }
-    try {
-      const res = await issueWorkEmail(user.firebase_uid, normalized);
-      setWorkEmailMessage(
-        `${res.data.created ? "Issued" : "Updated"} ${res.data.upn}`,
-      );
-      await loadData();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to issue work email.",
-      );
-    } finally {
-      setIssuingWorkEmail(false);
-    }
-  }
-
-  function selectedLicenseKeys(): Microsoft365LicenseKey[] {
-    return M365_LICENSE_OPTIONS.filter(
-      (option) => selectedM365Licenses[option.key],
-    ).map((option) => option.key);
-  }
-
-  async function handleM365AccountAction(
-    action: "activate" | "deactivate" | "delete",
-  ) {
-    if (!user) return;
-    setError("");
-    setM365ActionMessage("");
-    setM365AccountActionLoading(true);
-    try {
-      const res = await updateMicrosoft365AccountAction(
-        user.firebase_uid,
-        action,
-      );
-      setM365ActionMessage(
-        res.data.message || "Microsoft 365 account updated.",
-      );
-      await loadData();
-      await loadM365Licenses();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update Microsoft 365 account.",
-      );
-    } finally {
-      setM365AccountActionLoading(false);
-    }
-  }
-
-  async function handleAssignM365Licenses() {
-    if (!user) return;
-    const licenses = selectedLicenseKeys();
-    if (licenses.length === 0) {
-      setError("Select at least one Microsoft 365 license.");
-      return;
-    }
-    setError("");
-    setM365ActionMessage("");
-    setM365LicensesLoading(true);
-    try {
-      const res = await assignMicrosoft365Licenses(user.firebase_uid, licenses);
-      const data = res.data;
-      const results = data.results || [];
-      const failed = results.filter(
-        (r: { status: string }) => r.status === "failed",
-      );
-      const succeeded = results.filter(
-        (r: { status: string }) => r.status === "success",
-      );
-      if (failed.length > 0 && succeeded.length > 0) {
-        setM365ActionMessage(
-          `${succeeded.length} assigned. Failed: ${failed.map((f: { label: string; reason?: string }) => `${f.label} (${f.reason || "unknown"})`).join(", ")}`,
-        );
-      } else {
-        setM365ActionMessage(data.message || "Licenses assigned.");
-      }
-      await loadM365Licenses();
-      await loadData();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to assign licenses.",
-      );
-    } finally {
-      setM365LicensesLoading(false);
-    }
-  }
-
-  async function handleUnassignM365Licenses() {
-    if (!user) return;
-    const licenses = selectedLicenseKeys();
-    if (licenses.length === 0) {
-      setError("Select at least one Microsoft 365 license.");
-      return;
-    }
-    setError("");
-    setM365ActionMessage("");
-    setM365LicensesLoading(true);
-    try {
-      const res = await unassignMicrosoft365Licenses(
-        user.firebase_uid,
-        licenses,
-      );
-      const data = res.data;
-      const results = data.results || [];
-      const failed = results.filter(
-        (r: { status: string }) => r.status === "failed",
-      );
-      const succeeded = results.filter(
-        (r: { status: string }) => r.status === "success",
-      );
-      if (failed.length > 0 && succeeded.length > 0) {
-        setM365ActionMessage(
-          `${succeeded.length} unassigned. Failed: ${failed.map((f: { label: string; reason?: string }) => `${f.label} (${f.reason || "unknown"})`).join(", ")}`,
-        );
-      } else {
-        setM365ActionMessage(data.message || "Licenses unassigned.");
-      }
-      await loadM365Licenses();
-      await loadData();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to unassign licenses.",
-      );
-    } finally {
-      setM365LicensesLoading(false);
     }
   }
 
@@ -637,8 +451,7 @@ export default function UserDetailPage() {
               Set password (admin)
             </CardTitle>
             <CardDescription>
-              Set a new password for {user.name}. They will use it on the next
-              sign-in.
+              Set a new password for {user.name}. They will use it on the next sign-in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 max-w-sm">
@@ -677,180 +490,6 @@ export default function UserDetailPage() {
             >
               {adminPasswordSaving ? "Saving…" : "Update password"}
             </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {isAdmin() && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Issue Odum Work Email</CardTitle>
-            <CardDescription>
-              Create or refresh this user&apos;s Microsoft 365 account at{" "}
-              <span className="font-mono">@odum-research.com</span>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 max-w-md">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Current work email</Label>
-              <p className="text-sm text-muted-foreground">
-                {user.microsoft_upn || "Not issued yet"}
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Email local part</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={workEmailLocalPart}
-                  onChange={(e) => setWorkEmailLocalPart(e.target.value)}
-                  placeholder="first.last"
-                />
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  @odum-research.com
-                </span>
-              </div>
-            </div>
-            {workEmailMessage && (
-              <p className="text-sm text-emerald-400">{workEmailMessage}</p>
-            )}
-            <Button
-              size="sm"
-              onClick={handleIssueWorkEmail}
-              disabled={issuingWorkEmail}
-            >
-              {issuingWorkEmail ? "Issuing…" : "Issue work email"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {isAdmin() && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Microsoft 365 Account & Licenses
-            </CardTitle>
-            <CardDescription>
-              Deactivate/delete this Microsoft account and assign or unassign
-              key licenses.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={m365AccountActionLoading}
-                onClick={() => handleM365AccountAction("deactivate")}
-              >
-                <UserX className="size-4 mr-1" />
-                Deactivate account
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={m365AccountActionLoading}
-                onClick={() => handleM365AccountAction("activate")}
-              >
-                Activate account
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={m365AccountActionLoading}
-                onClick={() => handleM365AccountAction("delete")}
-              >
-                <Trash2 className="size-4 mr-1" />
-                Delete account
-              </Button>
-            </div>
-
-            <div className="grid gap-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                License selection
-              </p>
-              {M365_LICENSE_OPTIONS.map((license) => {
-                const current = m365Licenses.find(
-                  (item) => item.key === license.key,
-                );
-                return (
-                  <label
-                    key={license.key}
-                    className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
-                  >
-                    <span className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedM365Licenses[license.key]}
-                        onChange={(e) =>
-                          setSelectedM365Licenses((prev) => ({
-                            ...prev,
-                            [license.key]: e.target.checked,
-                          }))
-                        }
-                      />
-                      <span className="flex flex-col">
-                        <span>{license.label}</span>
-                        {typeof current?.remainingSeats === "number" &&
-                          typeof current?.totalSeats === "number" && (
-                            <span className="text-xs text-muted-foreground">
-                              {current.remainingSeats} remaining /{" "}
-                              {current.totalSeats} total
-                            </span>
-                          )}
-                      </span>
-                    </span>
-                    <Badge
-                      variant={
-                        current?.assigned
-                          ? "success"
-                          : current?.available
-                            ? "outline"
-                            : "error"
-                      }
-                    >
-                      {current?.assigned
-                        ? "assigned"
-                        : current?.available
-                          ? "available"
-                          : "missing sku"}
-                    </Badge>
-                  </label>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                disabled={m365LicensesLoading}
-                onClick={handleAssignM365Licenses}
-              >
-                <PlusCircle className="size-4 mr-1" />
-                Assign selected
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={m365LicensesLoading}
-                onClick={handleUnassignM365Licenses}
-              >
-                <MinusCircle className="size-4 mr-1" />
-                Unassign selected
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={m365LicensesLoading}
-                onClick={loadM365Licenses}
-              >
-                Check remaining licenses
-              </Button>
-            </div>
-
-            {m365ActionMessage && (
-              <p className="text-sm text-emerald-400">{m365ActionMessage}</p>
-            )}
           </CardContent>
         </Card>
       )}
@@ -1036,27 +675,12 @@ export default function UserDetailPage() {
                       {formatDateTime(doc.uploaded_at)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2 flex-wrap items-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs px-2 whitespace-nowrap"
-                          title="View document"
-                          disabled={downloadingDocId === doc.id}
-                          onClick={() => handleDocDownload(doc.id)}
-                        >
-                          {downloadingDocId === doc.id ? (
-                            <Loader2 className="size-3 animate-spin mr-1" />
-                          ) : (
-                            <Download className="size-3 mr-1" />
-                          )}
-                          View
-                        </Button>
+                      <div className="flex gap-1">
                         {doc.review_status !== "approved" && (
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="h-7 text-xs px-2 whitespace-nowrap text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
+                            className="h-7 text-xs"
                             onClick={async () => {
                               await reviewDocument(userId, doc.id, "approved");
                               loadData();
@@ -1067,9 +691,9 @@ export default function UserDetailPage() {
                         )}
                         {doc.review_status !== "rejected" && (
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="h-7 text-xs px-2 whitespace-nowrap text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive/80"
+                            className="h-7 text-xs text-destructive"
                             onClick={async () => {
                               await reviewDocument(userId, doc.id, "rejected");
                               loadData();
