@@ -8,3 +8,13 @@ env:
     availability:
       - BUILD
       - RUNTIME
+
+  - variable: FIREBASE_API_KEY
+    secret: FIREBASE_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: SECRET_REF_GITHUB_ADMIN_PAT
+    secret: github-automation-token
+    availability:
+      - RUNTIME
