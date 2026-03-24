@@ -138,6 +138,8 @@ export interface WorkflowRun {
   workflow_name: string;
   execution_name: string;
   status: string;
+  execution_error?: string | null;
+  execution_result?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -160,8 +160,15 @@ export default function UserDetailPage() {
 
   const handleReprovision = async () => {
     setReprovisioning(true);
+    setError("");
     try {
-      await reprovisionUser(userId);
+      const res = await reprovisionUser(userId);
+      if (res.data.workflow_state === "FAILED_TO_START") {
+        setError(
+          res.data.workflow_error ||
+            "Re-provision workflow failed to start. Check workflow config and service-account permissions.",
+        );
+      }
       await loadData();
     } catch (err: unknown) {
       setError(
@@ -431,6 +438,7 @@ export default function UserDetailPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Workflow</TableHead>
+                  <TableHead>Details</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Updated</TableHead>
                 </TableRow>
@@ -448,6 +456,9 @@ export default function UserDetailPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono text-xs max-w-[200px] truncate">
                       {run.workflow_name}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs max-w-[260px] truncate">
+                      {run.execution_error || run.execution_result || "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDateTime(run.created_at)}

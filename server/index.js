@@ -439,7 +439,6 @@ function getDefaultServicesForUser(role, status) {
 
 function normalizeObservedServiceStatus(status, message, fallback) {
   if (!status) return fallback;
-  if (status === "provisioned" && !message) return "pending";
   return status;
 }
 
@@ -897,6 +896,8 @@ app.post("/api/v1/users/onboard", async (req, res) => {
       workflow_name: WORKFLOW_NAMES.onboard,
       execution_name: execution.name,
       status: execution.state || "ACTIVE",
+      execution_error: execution.error || null,
+      execution_result: execution.result || null,
       input: workflowInput,
     });
 
@@ -1002,6 +1003,8 @@ app.put("/api/v1/users/:id", async (req, res) => {
       workflow_name: WORKFLOW_NAMES.modify,
       execution_name: execution.name,
       status: execution.state || "ACTIVE",
+      execution_error: execution.error || null,
+      execution_result: execution.result || null,
       input: payload,
     });
 
@@ -1050,6 +1053,8 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
       workflow_name: WORKFLOW_NAMES.offboard,
       execution_name: execution.name,
       status: execution.state || "ACTIVE",
+      execution_error: execution.error || null,
+      execution_result: execution.result || null,
       input: actions,
     });
 
@@ -1141,6 +1146,8 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
       workflow_name: WORKFLOW_NAMES.reprovision,
       execution_name: execution.name,
       status: execution.state || "ACTIVE",
+      execution_error: execution.error || null,
+      execution_result: execution.result || null,
       input: profile,
     });
     const realProviderExecutionEnabled = parseBool(
@@ -1198,7 +1205,12 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
       },
       { merge: true },
     );
-    res.json({ workflow_execution: execution.name, provisioning_steps });
+    res.json({
+      workflow_execution: execution.name,
+      workflow_state: execution.state || "UNKNOWN",
+      workflow_error: execution.error || null,
+      provisioning_steps,
+    });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

@@ -42,7 +42,11 @@ export async function offboardUser(id: string, req: OffboardRequest) {
 }
 
 export async function reprovisionUser(id: string) {
-  return apiClient.post<{ workflow_execution: string }>(`/users/${id}/reprovision`);
+  return apiClient.post<{
+    workflow_execution: string;
+    workflow_state: string;
+    workflow_error?: string | null;
+  }>(`/users/${id}/reprovision`);
 }
 
 export async function listUserWorkflowRuns(id: string) {

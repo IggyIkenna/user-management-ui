@@ -65,6 +65,7 @@ import {
   revokeRepoAccess,
 } from "@/lib/api/github";
 import { listUsers } from "@/lib/api/users";
+import { useAuth } from "@/hooks/use-auth";
 import { formatDateTime } from "@/lib/utils";
 import type {
   GitHubRepo,
@@ -90,6 +91,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function GitHubPage() {
+  const { user: authUser } = useAuth();
   const [repos, setRepos] = React.useState<GitHubRepo[]>([]);
   const [assignments, setAssignments] = React.useState<GitHubRepoAssignment[]>([]);
   const [users, setUsers] = React.useState<Person[]>([]);
@@ -98,6 +100,8 @@ export default function GitHubPage() {
   const [discovering, setDiscovering] = React.useState(false);
   const [discoverResult, setDiscoverResult] = React.useState("");
   const [search, setSearch] = React.useState("");
+  const [assignmentUserFilter, setAssignmentUserFilter] = React.useState("all");
+  const [showAccessibleOnly, setShowAccessibleOnly] = React.useState(false);
 
   const [grantOpen, setGrantOpen] = React.useState(false);
   const [grantForm, setGrantForm] = React.useState({
@@ -149,6 +153,13 @@ export default function GitHubPage() {
     fetchAssignments();
     fetchUsers();
   }, [fetchRepos, fetchAssignments, fetchUsers]);
+
+  React.useEffect(() => {
+    if (!authUser?.firebase_uid) return;
+    setAssignmentUserFilter((prev) =>
+      prev === "all" ? authUser.firebase_uid : prev,
+    );
+  }, [authUser?.firebase_uid]);
 
   async function handleDiscover() {
     setDiscovering(true);
@@ -208,7 +219,20 @@ export default function GitHubPage() {
     }
   }
 
+  const filteredAssignments = React.useMemo(() => {
+    if (assignmentUserFilter === "all") return assignments;
+    return assignments.filter((a) => a.firebase_uid === assignmentUserFilter);
+  }, [assignments, assignmentUserFilter]);
+
+  const accessibleRepoNames = React.useMemo(
+    () => new Set(filteredAssignments.map((a) => a.repo_full_name)),
+    [filteredAssignments],
+  );
+
   const filteredRepos = repos.filter((r) => {
+    if (showAccessibleOnly && !accessibleRepoNames.has(r.full_name)) {
+      return false;
+    }
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -347,17 +371,37 @@ export default function GitHubPage() {
                 Users with collaborator access to specific repositories
               </CardDescription>
             </div>
-            <Badge variant="secondary">{assignments.length} assignments</Badge>
+            <div className="flex items-center gap-2">
+              <Select
+                value={assignmentUserFilter}
+                onValueChange={setAssignmentUserFilter}
+              >
+                <SelectTrigger className="h-8 w-64">
+                  <SelectValue placeholder="Filter assignment user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All users</SelectItem>
+                  {usersWithGitHub.map((u) => (
+                    <SelectItem key={u.firebase_uid} value={u.firebase_uid}>
+                      {u.name} (@{u.github_handle})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Badge variant="secondary">
+                {filteredAssignments.length} assignments
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {assignLoading ? (
             <TableSkeleton rows={4} columns={5} />
-          ) : assignments.length === 0 ? (
+          ) : filteredAssignments.length === 0 ? (
             <EmptyState
               icon={GitBranch}
               title="No assignments"
-              description="Assign repo access to users using the button above."
+              description="No assignment matches the current filter."
             />
           ) : (
             <div className="rounded-md border">
@@ -372,7 +416,7 @@ export default function GitHubPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {assignments.map((a) => (
+                  {filteredAssignments.map((a) => (
                     <TableRow key={a.id}>
                       <TableCell className="font-medium">
                         @{a.github_handle}
@@ -417,6 +461,14 @@ export default function GitHubPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={showAccessibleOnly ? "default" : "outline"}
+                className="h-8"
+                onClick={() => setShowAccessibleOnly((prev) => !prev)}
+              >
+                {showAccessibleOnly ? "Showing Accessible Repos" : "Show Accessible Repos Only"}
+              </Button>
               <Input
                 placeholder="Filter repos..."
                 value={search}
