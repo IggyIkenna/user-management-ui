@@ -1,0 +1,12 @@
+# App Hosting runtime overrides for Next.js + Express sidecar API.
+scripts:
+  runCommand: sh -c "node server/index.js & npx next start -p ${PORT:-8080}"
+
+env:
+  - variable: USER_MGMT_API_URL
+    value: http://127.0.0.1:8017
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: FIREBASE_API_KEY
+    secret: FIREBASE_API_KEY
