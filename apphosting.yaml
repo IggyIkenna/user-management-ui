@@ -7,13 +7,7 @@ scripts:
 
 outputFiles:
   serverApp:
-    include:
-      - .next
-      - public
-      - server
-      - package.json
-      - package-lock.json
-      - next.config.mjs
+    include: [.]
 
 env:
   - variable: USER_MGMT_API_URL
