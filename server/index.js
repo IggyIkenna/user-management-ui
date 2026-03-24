@@ -2233,9 +2233,13 @@ app.get("/api/v1/github/access-scan", async (req, res) => {
         }
 
         const permissionData = await permissionResp.json();
+        const permission = permissionData.role_name || permissionData.permission || "unknown";
+        if (permission === "none") {
+          return;
+        }
         accessible_repos.push({
           repo_full_name: repo.full_name,
-          permission: permissionData.role_name || permissionData.permission || "unknown",
+          permission,
         });
       });
       await Promise.all(checks);
