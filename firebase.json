@@ -1,17 +1,19 @@
 {
-  "apphosting": {
-    "backendId": "user-management-ui",
-    "rootDir": ".",
-    "ignore": [
-      "node_modules",
-      ".git",
-      ".next",
-      "coverage",
-      "test-results",
-      "playwright-report",
-      ".firebase"
-    ]
-  },
+  "apphosting": [
+    {
+      "backendId": "user-management-ui",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        "coverage",
+        "test-results",
+        "playwright-report",
+        ".firebase"
+      ]
+    }
+  ],
   "hosting": {
     "site": "odum-user-management",
     "public": "public",
