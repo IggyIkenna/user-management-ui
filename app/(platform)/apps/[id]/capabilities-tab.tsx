@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   getAppCapabilities,
   updateAppCapabilities,
+  seedCapabilities,
 } from "@/lib/api/app-capabilities";
 import type {
   AppCapability,
@@ -58,6 +59,7 @@ export function CapabilitiesTab({ appId }: Props) {
   const [newKey, setNewKey] = React.useState("");
   const [newLabel, setNewLabel] = React.useState("");
   const [newCategory, setNewCategory] = React.useState<CapabilityCategory>("view");
+  const [seeding, setSeeding] = React.useState(false);
 
   const fetchCapabilities = React.useCallback(async () => {
     try {
@@ -125,6 +127,21 @@ export function CapabilitiesTab({ appId }: Props) {
     return caps.includes("*") || caps.includes(capKey);
   }
 
+  async function importFromSeed() {
+    setSeeding(true);
+    setError("");
+    setSuccess("");
+    try {
+      await seedCapabilities();
+      await fetchCapabilities();
+      setSuccess("Imported capability definitions from server seed file for all applications.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Seed import failed");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
   async function save() {
     if (!definition) return;
     setSaving(true);
@@ -168,13 +185,24 @@ export function CapabilitiesTab({ appId }: Props) {
         <CardHeader>
           <CardTitle className="text-base">Defined Capabilities</CardTitle>
           <CardDescription>
-            What features does this application expose? Capabilities are grouped into
-            view (read-only) and control (actions).
+            Feature keys returned by <code className="text-xs">/api/v1/authorize</code> for
+            this app. Grouped as view (read) vs control (actions). The Applications list only
+            shows app metadata; open this tab on an app to see roles and capabilities.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {definition.capabilities.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No capabilities defined yet.</p>
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Nothing is stored in Firestore for this app yet, so the grant dialog cannot
+                offer capability overrides. Import the bundled seed (updates{" "}
+                <strong className="text-foreground">all</strong> apps) or add keys manually
+                below.
+              </p>
+              <Button type="button" variant="secondary" size="sm" onClick={importFromSeed} disabled={seeding}>
+                {seeding ? "Importing…" : "Import defaults from seed file"}
+              </Button>
+            </div>
           ) : (
             <>
               {viewCaps.length > 0 && (

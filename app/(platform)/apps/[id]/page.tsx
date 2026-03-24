@@ -18,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -65,6 +64,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApplication } from "@/lib/api/applications";
 import { getAppCapabilities } from "@/lib/api/app-capabilities";
 import { CapabilitiesTab } from "./capabilities-tab";
+import { GrantSubjectField } from "./grant-subject-field";
 import {
   listEntitlements,
   grantEntitlement,
@@ -79,8 +79,6 @@ import type {
   AppRole,
   AuditLogEntry,
 } from "@/lib/api/types";
-
-const ENV_OPTIONS = ["development", "staging", "production"];
 
 export default function AppDetailPage() {
   const params = useParams();
@@ -252,6 +250,9 @@ export default function AppDetailPage() {
     );
   }
 
+  const envChoices =
+    app.environments.length > 0 ? app.environments : ["dev", "staging", "prod"];
+
   return (
     <div className="space-y-6">
       <Link href="/apps">
@@ -305,10 +306,37 @@ export default function AppDetailPage() {
         </TabsList>
 
         <TabsContent value="entitlements" className="space-y-6">
+      {(!capDefinition || capDefinition.capabilities.length === 0) && (
+        <p className="text-sm rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-muted-foreground">
+          No capability definitions in Firestore for this app yet. Open the{" "}
+          <strong className="text-foreground">Capabilities</strong> tab and use{" "}
+          <strong className="text-foreground">Import defaults from seed file</strong>, or run{" "}
+          <code className="text-xs">POST /api/v1/apps/capabilities/seed</code> on the API.
+        </p>
+      )}
       {/* Grant Access */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Entitlements</h2>
-        <Dialog open={grantOpen} onOpenChange={setGrantOpen}>
+        <Dialog
+          open={grantOpen}
+          onOpenChange={(open) => {
+            setGrantOpen(open);
+            if (open) {
+              const envs =
+                app.environments.length > 0 ? app.environments : ["dev", "staging", "prod"];
+              setGrantForm({
+                subject_type: "user",
+                subject_id: "",
+                subject_label: "",
+                role: "viewer",
+                environments: [...envs],
+                capabilities: [],
+                overrideCapabilities: false,
+              });
+              setGrantError("");
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm">
               <Plus className="mr-2 size-4" />
@@ -332,6 +360,8 @@ export default function AppDetailPage() {
                       setGrantForm((f) => ({
                         ...f,
                         subject_type: v as "user" | "group",
+                        subject_id: "",
+                        subject_label: "",
                       }))
                     }
                   >
@@ -344,27 +374,14 @@ export default function AppDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Subject ID</Label>
-                  <Input
-                    placeholder="Firebase UID or Group ID"
-                    value={grantForm.subject_id}
-                    onChange={(e) =>
-                      setGrantForm((f) => ({ ...f, subject_id: e.target.value }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Label (optional)</Label>
-                  <Input
-                    placeholder="Display name"
-                    value={grantForm.subject_label}
-                    onChange={(e) =>
-                      setGrantForm((f) => ({ ...f, subject_label: e.target.value }))
-                    }
-                  />
-                </div>
+                <GrantSubjectField
+                  subjectType={grantForm.subject_type}
+                  subjectId={grantForm.subject_id}
+                  subjectLabel={grantForm.subject_label}
+                  onSubjectChange={(id, label) =>
+                    setGrantForm((f) => ({ ...f, subject_id: id, subject_label: label }))
+                  }
+                />
                 <div className="space-y-1.5">
                   <Label>Role</Label>
                   <Select
@@ -386,8 +403,11 @@ export default function AppDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Environments</Label>
-                  <div className="flex gap-4">
-                    {ENV_OPTIONS.map((env) => (
+                  <p className="text-xs text-muted-foreground">
+                    Uses registry values: {envChoices.join(", ")}.
+                  </p>
+                  <div className="flex flex-wrap gap-4">
+                    {envChoices.map((env) => (
                       <label
                         key={env}
                         className="flex items-center gap-1.5 text-sm"
