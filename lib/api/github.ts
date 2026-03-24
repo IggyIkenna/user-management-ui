@@ -2,6 +2,7 @@ import { apiClient } from "@/lib/api/client";
 import type {
   GitHubRepo,
   GitHubRepoAssignment,
+  GitHubAccessScanResult,
   GitHubDiscoveryResult,
   GitHubRepoRole,
 } from "@/lib/api/types";
@@ -31,6 +32,12 @@ export async function assignRepo(payload: {
     "/github/assignments",
     payload,
   );
+}
+
+export async function scanActualRepoAccess(githubHandle: string) {
+  return apiClient.get<GitHubAccessScanResult>("/github/access-scan", {
+    params: { github_handle: githubHandle },
+  });
 }
 
 export async function revokeRepoAccess(assignmentId: string) {

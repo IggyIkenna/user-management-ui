@@ -2188,6 +2188,72 @@ app.get("/api/v1/github/assignments", async (req, res) => {
   }
 });
 
+app.get("/api/v1/github/access-scan", async (req, res) => {
+  try {
+    const githubHandle = String(req.query.github_handle || "").trim();
+    if (!githubHandle) {
+      return res.status(400).json({ error: "github_handle query param is required." });
+    }
+
+    const secrets = await loadProviderSecrets();
+    if (!secrets.githubToken) {
+      return res.status(500).json({ error: "GitHub token not configured." });
+    }
+
+    const reposSnapshot = await githubReposCollection().get();
+    const repos = reposSnapshot.docs
+      .map((doc) => doc.data())
+      .filter((repo) => repo?.full_name && !repo.archived);
+
+    const accessible_repos = [];
+    const errors = [];
+    const BATCH_SIZE = 10;
+
+    for (let i = 0; i < repos.length; i += BATCH_SIZE) {
+      const batch = repos.slice(i, i + BATCH_SIZE);
+      const checks = batch.map(async (repo) => {
+        const [owner, repoName] = String(repo.full_name).split("/");
+        if (!owner || !repoName) return;
+        const permissionResp = await fetch(
+          `https://api.github.com/repos/${owner}/${repoName}/collaborators/${encodeURIComponent(githubHandle)}/permission`,
+          {
+            headers: {
+              Authorization: `Bearer ${secrets.githubToken}`,
+              Accept: "application/vnd.github+json",
+            },
+          },
+        );
+
+        if (permissionResp.status === 404) {
+          return;
+        }
+        if (!permissionResp.ok) {
+          errors.push(`${repo.full_name}: ${permissionResp.status} ${await permissionResp.text()}`);
+          return;
+        }
+
+        const permissionData = await permissionResp.json();
+        accessible_repos.push({
+          repo_full_name: repo.full_name,
+          permission: permissionData.role_name || permissionData.permission || "unknown",
+        });
+      });
+      await Promise.all(checks);
+    }
+
+    accessible_repos.sort((a, b) => a.repo_full_name.localeCompare(b.repo_full_name));
+    res.json({
+      github_handle: githubHandle,
+      scanned_total: repos.length,
+      accessible_total: accessible_repos.length,
+      accessible_repos,
+      errors,
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 app.post("/api/v1/github/assignments", async (req, res) => {
   try {
     const payload = req.body || {};

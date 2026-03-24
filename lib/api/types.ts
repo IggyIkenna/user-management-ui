@@ -351,3 +351,16 @@ export interface GitHubDiscoveryResult {
   org: string;
   discovered_at: string;
 }
+
+export interface GitHubAccessScanRepo {
+  repo_full_name: string;
+  permission: string;
+}
+
+export interface GitHubAccessScanResult {
+  github_handle: string;
+  scanned_total: number;
+  accessible_total: number;
+  accessible_repos: GitHubAccessScanRepo[];
+  errors: string[];
+}

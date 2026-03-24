@@ -62,6 +62,7 @@ import {
   listRepos,
   listAssignments,
   assignRepo,
+  scanActualRepoAccess,
   revokeRepoAccess,
 } from "@/lib/api/github";
 import { listUsers } from "@/lib/api/users";
@@ -102,6 +103,10 @@ export default function GitHubPage() {
   const [search, setSearch] = React.useState("");
   const [assignmentUserFilter, setAssignmentUserFilter] = React.useState("all");
   const [showAccessibleOnly, setShowAccessibleOnly] = React.useState(false);
+  const [actualAccessRepos, setActualAccessRepos] = React.useState<Set<string>>(new Set());
+  const [actualAccessLoading, setActualAccessLoading] = React.useState(false);
+  const [actualAccessError, setActualAccessError] = React.useState("");
+  const [actualAccessCount, setActualAccessCount] = React.useState(0);
 
   const [grantOpen, setGrantOpen] = React.useState(false);
   const [grantForm, setGrantForm] = React.useState({
@@ -160,6 +165,46 @@ export default function GitHubPage() {
       prev === "all" ? authUser.firebase_uid : prev,
     );
   }, [authUser?.firebase_uid]);
+
+  const selectedUser = React.useMemo(
+    () => users.find((u) => u.firebase_uid === assignmentUserFilter),
+    [users, assignmentUserFilter],
+  );
+
+  const refreshActualAccess = React.useCallback(async () => {
+    if (assignmentUserFilter === "all" || !selectedUser?.github_handle) {
+      setActualAccessRepos(new Set());
+      setActualAccessCount(0);
+      setActualAccessError("");
+      return;
+    }
+    setActualAccessLoading(true);
+    setActualAccessError("");
+    try {
+      const res = await scanActualRepoAccess(selectedUser.github_handle);
+      setActualAccessRepos(
+        new Set(res.data.accessible_repos.map((repo) => repo.repo_full_name)),
+      );
+      setActualAccessCount(res.data.accessible_total);
+      if (res.data.errors.length > 0) {
+        setActualAccessError(
+          `Some repos could not be scanned (${res.data.errors.length}).`,
+        );
+      }
+    } catch (err) {
+      setActualAccessRepos(new Set());
+      setActualAccessCount(0);
+      setActualAccessError(
+        err instanceof Error ? err.message : "Failed to scan actual GitHub access.",
+      );
+    } finally {
+      setActualAccessLoading(false);
+    }
+  }, [assignmentUserFilter, selectedUser?.github_handle]);
+
+  React.useEffect(() => {
+    refreshActualAccess();
+  }, [refreshActualAccess]);
 
   async function handleDiscover() {
     setDiscovering(true);
@@ -225,8 +270,11 @@ export default function GitHubPage() {
   }, [assignments, assignmentUserFilter]);
 
   const accessibleRepoNames = React.useMemo(
-    () => new Set(filteredAssignments.map((a) => a.repo_full_name)),
-    [filteredAssignments],
+    () => {
+      const fromAssignments = filteredAssignments.map((a) => a.repo_full_name);
+      return new Set([...fromAssignments, ...actualAccessRepos]);
+    },
+    [filteredAssignments, actualAccessRepos],
   );
 
   const filteredRepos = repos.filter((r) => {
@@ -388,13 +436,32 @@ export default function GitHubPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {assignmentUserFilter !== "all" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8"
+                  onClick={refreshActualAccess}
+                  disabled={actualAccessLoading}
+                >
+                  {actualAccessLoading ? "Checking GitHub..." : "Refresh Actual Access"}
+                </Button>
+              )}
               <Badge variant="secondary">
                 {filteredAssignments.length} assignments
               </Badge>
+              {assignmentUserFilter !== "all" && (
+                <Badge variant="secondary">
+                  {actualAccessCount} actual repos
+                </Badge>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
+          {actualAccessError && assignmentUserFilter !== "all" && (
+            <p className="mb-3 text-sm text-amber-500">{actualAccessError}</p>
+          )}
           {assignLoading ? (
             <TableSkeleton rows={4} columns={5} />
           ) : filteredAssignments.length === 0 ? (
