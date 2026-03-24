@@ -6,6 +6,7 @@ import {
   DeleteUserPolicyCommand,
   DeleteUserCommand,
 } from "@aws-sdk/client-iam";
+import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { loadProviderSecrets } from "./secret-manager.js";
 
 const googleAuth = new GoogleAuth({
@@ -53,6 +54,37 @@ function fail(service, label, message) {
 
 function na(service, label, message) {
   return { service, label, status: "success", message: message || "not applicable" };
+}
+
+function buildAwsClientConfig(secrets) {
+  const config = {
+    region: process.env.AWS_REGION || "us-east-1",
+  };
+  if (secrets.awsAccessKeyId && secrets.awsSecretAccessKey) {
+    config.credentials = {
+      accessKeyId: secrets.awsAccessKeyId,
+      secretAccessKey: secrets.awsSecretAccessKey,
+      sessionToken: secrets.awsSessionToken || undefined,
+    };
+  }
+  return config;
+}
+
+function isAwsBreakglassEnabled() {
+  const raw =
+    process.env.AWS_BREAKGLASS_ENABLED ??
+    (process.env.NODE_ENV === "production" ? "false" : "true");
+  return String(raw) === "true";
+}
+
+async function resolveGcpProjectId() {
+  if (process.env.GCP_TARGET_PROJECT_ID) return process.env.GCP_TARGET_PROJECT_ID;
+  if (process.env.GOOGLE_CLOUD_PROJECT_ID) return process.env.GOOGLE_CLOUD_PROJECT_ID;
+  try {
+    return await googleAuth.getProjectId();
+  } catch {
+    return "";
+  }
 }
 
 async function provisionGitHub(profile, secrets) {
@@ -120,27 +152,74 @@ async function provisionSlack(profile, secrets) {
   if (!needsSlack) {
     return na("slack", "Slack");
   }
-  if (!secrets.slackToken) {
-    return fail("slack", "Slack", "Missing Slack admin token.");
+  if (!secrets.slackScimToken) {
+    return fail("slack", "Slack", "Missing Slack SCIM token (set SLACK_SCIM_TOKEN or SECRET_REF_SLACK_SCIM_TOKEN).");
   }
-  const params = new URLSearchParams({ email: profile.email, resend: "true" });
-  const res = await fetch("https://slack.com/api/users.admin.invite", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secrets.slackToken}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params,
+  const scimHeaders = {
+    Authorization: `Bearer ${secrets.slackScimToken}`,
+    "Content-Type": "application/json",
+  };
+  const filter = encodeURIComponent(`email eq "${profile.email}"`);
+  const lookupRes = await fetch(`https://api.slack.com/scim/v1/Users?filter=${filter}`, {
+    method: "GET",
+    headers: scimHeaders,
   });
-  const body = await res.json();
-  if (!body.ok && body.error !== "already_invited" && body.error !== "already_in_team") {
-    return fail("slack", "Slack", `Slack invite failed: ${body.error}`);
+  if (!lookupRes.ok) {
+    return fail("slack", "Slack", `Slack SCIM lookup failed: ${await lookupRes.text()}`);
+  }
+  const lookupBody = await lookupRes.json();
+  const existingUser =
+    Array.isArray(lookupBody?.Resources) && lookupBody.Resources.length > 0
+      ? lookupBody.Resources[0]
+      : null;
+  if (!existingUser) {
+    const createPayload = {
+      userName: profile.email,
+      displayName: profile.name,
+      active: true,
+      emails: [{ value: profile.email, primary: true }],
+      name: {
+        formatted: profile.name,
+      },
+    };
+    const createRes = await fetch("https://api.slack.com/scim/v1/Users", {
+      method: "POST",
+      headers: scimHeaders,
+      body: JSON.stringify(createPayload),
+    });
+    if (!createRes.ok) {
+      return fail("slack", "Slack", `Slack SCIM create failed: ${await createRes.text()}`);
+    }
+  } else if (!existingUser.active) {
+    const patchRes = await fetch(`https://api.slack.com/scim/v1/Users/${existingUser.id}`, {
+      method: "PATCH",
+      headers: scimHeaders,
+      body: JSON.stringify({
+        Operations: [
+          {
+            op: "Replace",
+            path: "active",
+            value: true,
+          },
+        ],
+      }),
+    });
+    if (!patchRes.ok) {
+      return fail("slack", "Slack", `Slack SCIM activate failed: ${await patchRes.text()}`);
+    }
   }
   if (template.slack_channels.length > 0) {
+    if (!secrets.slackBotToken) {
+      return fail(
+        "slack",
+        "Slack",
+        "Slack channels requested but SLACK_BOT_TOKEN/SECRET_REF_SLACK_BOT_TOKEN is missing.",
+      );
+    }
     const lookup = await fetch("https://slack.com/api/users.lookupByEmail", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${secrets.slackToken}`,
+        Authorization: `Bearer ${secrets.slackBotToken}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ email: profile.email }),
@@ -157,7 +236,7 @@ async function provisionSlack(profile, secrets) {
       const invite = await fetch("https://slack.com/api/conversations.invite", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${secrets.slackToken}`,
+          Authorization: `Bearer ${secrets.slackBotToken}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
@@ -175,7 +254,7 @@ async function provisionSlack(profile, secrets) {
       }
     }
   }
-  return ok("slack", "Slack", "Slack invite/channel mappings processed.");
+  return ok("slack", "Slack", "Slack user onboarded via SCIM and channel mappings processed.");
 }
 
 async function getMicrosoftGraphToken(secrets) {
@@ -235,9 +314,13 @@ async function provisionGcp(profile) {
   if (!roleNeedsCloud(profile.role)) {
     return na("gcp", "GCP IAM");
   }
-  const projectId = process.env.GCP_TARGET_PROJECT_ID;
+  const projectId = await resolveGcpProjectId();
   if (!projectId) {
-    return fail("gcp", "GCP IAM", "Missing GCP_TARGET_PROJECT_ID.");
+    return fail(
+      "gcp",
+      "GCP IAM",
+      "Missing GCP project target. Set GCP_TARGET_PROJECT_ID or GOOGLE_CLOUD_PROJECT_ID.",
+    );
   }
   const member = `user:${profile.gcp_email || profile.email}`;
   const role = profile.role === "admin" ? "roles/editor" : "roles/viewer";
@@ -270,26 +353,16 @@ async function provisionAws(profile, secrets) {
   if (!needsAws) {
     return na("aws", "AWS IAM");
   }
-  if (!secrets.awsAccessKeyId || !secrets.awsSecretAccessKey) {
-    return fail("aws", "AWS IAM", "Missing AWS credentials.");
-  }
-  const breakglass = String(process.env.AWS_BREAKGLASS_ENABLED || "false") === "true";
+  const breakglass = isAwsBreakglassEnabled();
   if (!breakglass) {
     return ok(
       "aws",
       "AWS IAM",
-      `AWS breakglass disabled; expected via IAM Identity Center workflow (template sets: ${template.aws_permission_sets.join(", ") || "none"}).`,
+      `AWS breakglass disabled; set AWS_BREAKGLASS_ENABLED=true for native IAM provisioning (template sets: ${template.aws_permission_sets.join(", ") || "none"}).`,
     );
   }
 
-  const iamClient = new IAMClient({
-    region: process.env.AWS_REGION || "us-east-1",
-    credentials: {
-      accessKeyId: secrets.awsAccessKeyId,
-      secretAccessKey: secrets.awsSecretAccessKey,
-      sessionToken: secrets.awsSessionToken || undefined,
-    },
-  });
+  const iamClient = new IAMClient(buildAwsClientConfig(secrets));
   const userName = `${process.env.AWS_NATIVE_IAM_USER_PREFIX || "um-"}${profile.firebase_uid}`;
   try {
     await iamClient.send(
@@ -407,56 +480,81 @@ async function deprovisionGitHub(profile, secrets) {
 
 async function deprovisionSlack(profile, secrets) {
   const template = getTemplate(profile);
-  if (!secrets.slackToken) {
-    return na("slack", "Slack", "Slack token missing; skipped.");
+  if (!secrets.slackScimToken) {
+    return fail("slack", "Slack", "Missing Slack SCIM token (set SLACK_SCIM_TOKEN or SECRET_REF_SLACK_SCIM_TOKEN).");
   }
-  const lookup = await fetch("https://slack.com/api/users.lookupByEmail", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secrets.slackToken}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({ email: profile.email }),
+  const scimHeaders = {
+    Authorization: `Bearer ${secrets.slackScimToken}`,
+    "Content-Type": "application/json",
+  };
+  const filter = encodeURIComponent(`email eq "${profile.email}"`);
+  const lookupRes = await fetch(`https://api.slack.com/scim/v1/Users?filter=${filter}`, {
+    method: "GET",
+    headers: scimHeaders,
   });
-  const data = await lookup.json();
-  if (!data.ok || !data.user?.id) {
+  if (!lookupRes.ok) {
+    return fail("slack", "Slack", `Slack SCIM lookup failed: ${await lookupRes.text()}`);
+  }
+  const lookupBody = await lookupRes.json();
+  const existingUser =
+    Array.isArray(lookupBody?.Resources) && lookupBody.Resources.length > 0
+      ? lookupBody.Resources[0]
+      : null;
+  if (!existingUser) {
     return na("slack", "Slack", "Slack user not found.");
   }
-  for (const channelId of template.slack_channels || []) {
-    const kick = await fetch("https://slack.com/api/conversations.kick", {
+  if (template.slack_channels.length > 0 && secrets.slackBotToken) {
+    const lookup = await fetch("https://slack.com/api/users.lookupByEmail", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${secrets.slackToken}`,
+        Authorization: `Bearer ${secrets.slackBotToken}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({ channel: channelId, user: data.user.id }),
+      body: new URLSearchParams({ email: profile.email }),
     });
-    const kickResult = await kick.json();
-    if (
-      !kickResult.ok &&
-      kickResult.error !== "not_in_channel" &&
-      kickResult.error !== "channel_not_found"
-    ) {
-      return fail(
-        "slack",
-        "Slack",
-        `Slack channel removal failed for ${channelId}: ${kickResult.error}`,
-      );
+    const data = await lookup.json();
+    if (data.ok && data.user?.id) {
+      for (const channelId of template.slack_channels || []) {
+        const kick = await fetch("https://slack.com/api/conversations.kick", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${secrets.slackBotToken}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ channel: channelId, user: data.user.id }),
+        });
+        const kickResult = await kick.json();
+        if (
+          !kickResult.ok &&
+          kickResult.error !== "not_in_channel" &&
+          kickResult.error !== "channel_not_found"
+        ) {
+          return fail(
+            "slack",
+            "Slack",
+            `Slack channel removal failed for ${channelId}: ${kickResult.error}`,
+          );
+        }
+      }
     }
   }
-  const deactivate = await fetch("https://slack.com/api/users.admin.setInactive", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secrets.slackToken}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({ user: data.user.id }),
+  const deactivate = await fetch(`https://api.slack.com/scim/v1/Users/${existingUser.id}`, {
+    method: "PATCH",
+    headers: scimHeaders,
+    body: JSON.stringify({
+      Operations: [
+        {
+          op: "Replace",
+          path: "active",
+          value: false,
+        },
+      ],
+    }),
   });
-  const result = await deactivate.json();
-  if (!result.ok && result.error !== "already_inactive") {
-    return fail("slack", "Slack", `Slack deprovision failed: ${result.error}`);
+  if (!deactivate.ok) {
+    return fail("slack", "Slack", `Slack deprovision failed: ${await deactivate.text()}`);
   }
-  return ok("slack", "Slack", "Slack account deactivated.");
+  return ok("slack", "Slack", "Slack account deactivated via SCIM.");
 }
 
 async function deprovisionM365(profile, secrets) {
@@ -486,9 +584,13 @@ async function deprovisionGcp(profile) {
   if (!roleNeedsCloud(profile.role)) {
     return na("gcp", "GCP IAM");
   }
-  const projectId = process.env.GCP_TARGET_PROJECT_ID;
+  const projectId = await resolveGcpProjectId();
   if (!projectId) {
-    return fail("gcp", "GCP IAM", "Missing GCP_TARGET_PROJECT_ID.");
+    return fail(
+      "gcp",
+      "GCP IAM",
+      "Missing GCP project target. Set GCP_TARGET_PROJECT_ID or GOOGLE_CLOUD_PROJECT_ID.",
+    );
   }
   const member = `user:${profile.gcp_email || profile.email}`;
   const client = await googleAuth.getClient();
@@ -511,21 +613,11 @@ async function deprovisionGcp(profile) {
 }
 
 async function deprovisionAws(profile, secrets) {
-  const breakglass = String(process.env.AWS_BREAKGLASS_ENABLED || "false") === "true";
+  const breakglass = isAwsBreakglassEnabled();
   if (!breakglass) {
     return ok("aws", "AWS IAM", "Breakglass disabled; IAM Identity Center deprovision via workflow.");
   }
-  if (!secrets.awsAccessKeyId || !secrets.awsSecretAccessKey) {
-    return fail("aws", "AWS IAM", "Missing AWS credentials.");
-  }
-  const iamClient = new IAMClient({
-    region: process.env.AWS_REGION || "us-east-1",
-    credentials: {
-      accessKeyId: secrets.awsAccessKeyId,
-      secretAccessKey: secrets.awsSecretAccessKey,
-      sessionToken: secrets.awsSessionToken || undefined,
-    },
-  });
+  const iamClient = new IAMClient(buildAwsClientConfig(secrets));
   const userName = `${process.env.AWS_NATIVE_IAM_USER_PREFIX || "um-"}${profile.firebase_uid}`;
   try {
     await iamClient.send(
@@ -648,18 +740,44 @@ export async function runProviderHealthChecks() {
 
   // Slack
   try {
-    if (!secrets.slackToken) {
-      pushCheck("slack", false, "Missing Slack token.");
+    if (!secrets.slackScimToken) {
+      pushCheck("slack", false, "Missing Slack SCIM token.");
     } else {
-      const res = await fetch("https://slack.com/api/auth.test", {
+      const res = await fetch("https://api.slack.com/scim/v1/Users?count=1", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${secrets.slackScimToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      pushCheck(
+        "slack",
+        res.ok,
+        res.ok
+          ? "Slack SCIM reachable."
+          : `Slack SCIM health check failed: ${await res.text()}`,
+      );
+    }
+    if (!secrets.slackBotToken) {
+      pushCheck(
+        "slack-bot",
+        false,
+        "Missing Slack bot token (required for channel invite/removal).",
+      );
+    } else {
+      const botAuthRes = await fetch("https://slack.com/api/auth.test", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${secrets.slackToken}`,
+          Authorization: `Bearer ${secrets.slackBotToken}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
       });
-      const data = await res.json();
-      pushCheck("slack", Boolean(data.ok), data.ok ? "Slack reachable." : data.error);
+      const botAuthData = await botAuthRes.json();
+      pushCheck(
+        "slack-bot",
+        Boolean(botAuthData.ok),
+        botAuthData.ok ? "Slack bot token reachable." : botAuthData.error,
+      );
     }
   } catch (error) {
     pushCheck("slack", false, String(error));
@@ -679,9 +797,13 @@ export async function runProviderHealthChecks() {
 
   // GCP IAM
   try {
-    const projectId = process.env.GCP_TARGET_PROJECT_ID;
+    const projectId = await resolveGcpProjectId();
     if (!projectId) {
-      pushCheck("gcp", false, "Missing GCP_TARGET_PROJECT_ID.");
+      pushCheck(
+        "gcp",
+        false,
+        "Missing GCP project target. Set GCP_TARGET_PROJECT_ID or GOOGLE_CLOUD_PROJECT_ID.",
+      );
     } else {
       const client = await googleAuth.getClient();
       const res = await client.request({
@@ -696,17 +818,15 @@ export async function runProviderHealthChecks() {
 
   // AWS
   try {
-    if (!secrets.awsAccessKeyId || !secrets.awsSecretAccessKey) {
-      pushCheck("aws", false, "Missing AWS credentials.");
-    } else {
-      pushCheck(
-        "aws",
-        true,
-        "AWS credentials present (STS check is available in admin endpoint).",
-      );
-    }
+    const stsClient = new STSClient(buildAwsClientConfig(secrets));
+    const identity = await stsClient.send(new GetCallerIdentityCommand({}));
+    pushCheck("aws", true, "AWS STS reachable.", identity);
   } catch (error) {
-    pushCheck("aws", false, String(error));
+    pushCheck(
+      "aws",
+      false,
+      `AWS auth failed. Ensure CLI/SSO is logged in or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY. ${String(error)}`,
+    );
   }
 
   return checks;

@@ -8,6 +8,9 @@ This document maps provider integrations to required env and secret references.
 - `GOOGLE_CLOUD_LOCATION`
 - `GOOGLE_WORKFLOW_*` names for global/provider workflows
 - `GOOGLE_WORKFLOW_INVOKER_SERVICE_ACCOUNT`
+- Firebase API key:
+  - `FIREBASE_API_KEY` (direct env var), or
+  - `SECRET_REF_FIREBASE_API_KEY` (Secret Manager ref; preferred)
 
 ## GitHub
 
@@ -24,7 +27,8 @@ This document maps provider integrations to required env and secret references.
   - `SLACK_WORKSPACE_ID`
   - `SLACK_DEFAULT_CHANNEL_*` (optional defaults)
 - Secret ref:
-  - `SECRET_REF_SLACK_ADMIN_TOKEN`
+  - `SECRET_REF_SLACK_SCIM_TOKEN`
+  - `SECRET_REF_SLACK_BOT_TOKEN`
 
 ## Microsoft 365 / Graph
 
@@ -82,3 +86,12 @@ This document maps provider integrations to required env and secret references.
 - Use Secret Manager refs in production; avoid direct raw secrets in env variables.
 - Grant least privilege to service accounts executing provider calls.
 - Rotate provider tokens and keys on a regular schedule.
+
+## GitHub Deployment Variables
+
+For CI/CD deployments, set one of these in GitHub:
+
+- `FIREBASE_API_KEY` as a GitHub Secret, or
+- `SECRET_REF_FIREBASE_API_KEY` as a GitHub Variable/Secret containing the full Secret Manager path.
+
+The API server supports both, and resolves `SECRET_REF_FIREBASE_API_KEY` first.

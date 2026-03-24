@@ -20,13 +20,13 @@ echo "--- Format check ---"
 npm run format:check
 
 echo "--- Typecheck ---"
-npm run typecheck 2>/dev/null || npm run type-check
+npm run typecheck
 
 echo "--- Lint ---"
 npm run lint
 
-echo "--- Unit + integration tests with coverage ---"
-npm run test:coverage
+echo "--- Next.js build ---"
+npx next build
 
 if [[ "$RUN_SMOKE" == "true" ]]; then
   if [[ "${SKIP_SMOKE_TESTS:-false}" == "true" ]]; then

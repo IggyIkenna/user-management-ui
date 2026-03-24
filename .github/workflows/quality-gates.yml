@@ -34,5 +34,4 @@ jobs:
           CI: "true"
           WORKFLOW_EXECUTION_ENABLED: "false"
           REAL_PROVIDER_EXECUTION_ENABLED: "false"
-          VITE_SKIP_AUTH: "true"
         run: npm run quality:gates:ci

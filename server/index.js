@@ -1,14 +1,33 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import express from "express";
 import cors from "cors";
 import { GoogleAuth } from "google-auth-library";
 import admin from "firebase-admin";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
+
+for (const envFile of [".env.development", ".env.local", ".env"]) {
+  try {
+    const contents = readFileSync(resolve(envFile), "utf8");
+    for (const line of contents.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) process.env[key] = val;
+    }
+  } catch {
+    /* file not found is fine */
+  }
+}
 import {
   runProviderDeprovisioning,
   runProviderHealthChecks,
   runProviderProvisioning,
 } from "./providers.js";
-import { loadProviderSecrets } from "./secret-manager.js";
+import { loadProviderSecrets, resolveFirebaseApiKey } from "./secret-manager.js";
 
 const PORT = Number(process.env.PORT || 8017);
 const FIREBASE_PROJECT_ID =
@@ -53,6 +72,59 @@ function workflowsCollection() {
 
 function healthChecksCollection() {
   return firestore.collection("health_check_runs");
+}
+
+function applicationsCollection() {
+  return firestore.collection("applications");
+}
+
+function appSyncHistoryCollection() {
+  return firestore.collection("app_sync_history");
+}
+
+function appEntitlementsCollection() {
+  return firestore.collection("app_entitlements");
+}
+
+function groupsCollection() {
+  return firestore.collection("user_groups");
+}
+
+function auditLogCollection() {
+  return firestore.collection("audit_log");
+}
+
+function appCapabilitiesCollection() {
+  return firestore.collection("app_capabilities");
+}
+
+function githubReposCollection() {
+  return firestore.collection("github_repos");
+}
+
+function githubAssignmentsCollection() {
+  return firestore.collection("github_repo_assignments");
+}
+
+async function resolveCapabilities(appId, role, explicitCapabilities) {
+  if (explicitCapabilities && explicitCapabilities.length > 0) {
+    return explicitCapabilities;
+  }
+  const capDoc = await appCapabilitiesCollection().doc(appId).get();
+  if (!capDoc.exists) {
+    if (role === "admin" || role === "owner") return ["*"];
+    return [];
+  }
+  const presets = capDoc.data().role_presets || {};
+  return presets[role] || [];
+}
+
+async function writeAuditEntry(entry) {
+  const now = new Date().toISOString();
+  await auditLogCollection().add({
+    ...entry,
+    timestamp: now,
+  });
 }
 
 function validateAccessTemplatePayload(payload, isPartial = false) {
@@ -217,10 +289,11 @@ async function logWorkflowRun(run) {
 async function listUserWorkflowRuns(firebaseUid) {
   const snapshot = await workflowsCollection()
     .where("firebase_uid", "==", firebaseUid)
-    .orderBy("created_at", "desc")
-    .limit(20)
+    .limit(50)
     .get();
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const runs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  runs.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  return runs.slice(0, 20);
 }
 
 async function listUsersWithProfiles() {
@@ -237,7 +310,7 @@ async function listUsersWithProfiles() {
     const profile = profileMap.get(u.uid) || {};
     const role = profile.role || u.customClaims?.role || "client";
     const status = u.disabled ? "offboarded" : "active";
-    const serviceStatus = status === "offboarded" ? "not_applicable" : "provisioned";
+    const defaultServices = getDefaultServicesForUser(role, status);
     return {
       id: profile.id || u.uid,
       firebase_uid: u.uid,
@@ -252,17 +325,42 @@ async function listUsersWithProfiles() {
       access_template_id: profile.access_template_id || null,
       access_template: profile.access_template || null,
       service_messages: profile.service_messages || {},
+      service_synced_at: profile.service_synced_at || {},
       workflow_failure_reason: profile.workflow_failure_reason || null,
       status,
       provisioned_at: profile.provisioned_at || u.metadata.creationTime,
       last_modified: profile.last_modified || u.metadata.lastRefreshTime,
       services: {
-        github: profile.services?.github || serviceStatus,
-        slack: profile.services?.slack || serviceStatus,
-        microsoft365: profile.services?.microsoft365 || serviceStatus,
-        gcp: profile.services?.gcp || serviceStatus,
-        aws: profile.services?.aws || serviceStatus,
-        portal: profile.services?.portal || serviceStatus,
+        github: normalizeObservedServiceStatus(
+          profile.services?.github,
+          profile.service_messages?.github,
+          defaultServices.github,
+        ),
+        slack: normalizeObservedServiceStatus(
+          profile.services?.slack,
+          profile.service_messages?.slack,
+          defaultServices.slack,
+        ),
+        microsoft365: normalizeObservedServiceStatus(
+          profile.services?.microsoft365,
+          profile.service_messages?.microsoft365,
+          defaultServices.microsoft365,
+        ),
+        gcp: normalizeObservedServiceStatus(
+          profile.services?.gcp,
+          profile.service_messages?.gcp,
+          defaultServices.gcp,
+        ),
+        aws: normalizeObservedServiceStatus(
+          profile.services?.aws,
+          profile.service_messages?.aws,
+          defaultServices.aws,
+        ),
+        portal: normalizeObservedServiceStatus(
+          profile.services?.portal,
+          profile.service_messages?.portal,
+          defaultServices.portal,
+        ),
       },
     };
   });
@@ -287,6 +385,10 @@ function roleNeedsSlack(role) {
   return role !== "shareholder";
 }
 
+function roleNeedsGithub(role) {
+  return role === "admin" || role === "collaborator";
+}
+
 function roleNeedsM365(role) {
   const collaboratorM365Enabled =
     String(process.env.COLLABORATOR_M365_ENABLED || "true") === "true";
@@ -296,6 +398,49 @@ function roleNeedsM365(role) {
     role === "operations" ||
     (collaboratorM365Enabled && role === "collaborator")
   );
+}
+
+function roleNeedsCloud(role) {
+  return role === "admin" || role === "collaborator";
+}
+
+function serviceApplicability(role) {
+  return {
+    github: roleNeedsGithub(role),
+    slack: roleNeedsSlack(role),
+    microsoft365: roleNeedsM365(role),
+    gcp: roleNeedsCloud(role),
+    aws: roleNeedsCloud(role),
+    portal: true,
+  };
+}
+
+function getDefaultServicesForUser(role, status) {
+  if (status === "offboarded") {
+    return {
+      github: "not_applicable",
+      slack: "not_applicable",
+      microsoft365: "not_applicable",
+      gcp: "not_applicable",
+      aws: "not_applicable",
+      portal: "not_applicable",
+    };
+  }
+  const applicability = serviceApplicability(role);
+  return {
+    github: applicability.github ? "pending" : "not_applicable",
+    slack: applicability.slack ? "pending" : "not_applicable",
+    microsoft365: applicability.microsoft365 ? "pending" : "not_applicable",
+    gcp: applicability.gcp ? "pending" : "not_applicable",
+    aws: applicability.aws ? "pending" : "not_applicable",
+    portal: applicability.portal ? "pending" : "not_applicable",
+  };
+}
+
+function normalizeObservedServiceStatus(status, message, fallback) {
+  if (!status) return fallback;
+  if (status === "provisioned" && !message) return "pending";
+  return status;
 }
 
 async function computeQuotaCheck(role) {
@@ -340,10 +485,68 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.post("/api/v1/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required." });
+    }
+    const apiKey = await resolveFirebaseApiKey();
+    if (!apiKey) {
+      return res.status(500).json({ error: "FIREBASE_API_KEY not configured on server." });
+    }
+    const authResp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
+      },
+    );
+    const authData = await authResp.json();
+    if (!authResp.ok) {
+      const msg = authData?.error?.message || "Authentication failed.";
+      return res.status(401).json({ error: msg });
+    }
+    const uid = authData.localId;
+    let userRecord;
+    try {
+      userRecord = await auth.getUser(uid);
+    } catch {
+      return res.status(401).json({ error: "Firebase user record not found." });
+    }
+    res.json({
+      token: authData.idToken,
+      uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName || "",
+      role: userRecord.customClaims?.role || "client",
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 app.get("/api/v1/users", async (_req, res) => {
   try {
     const users = await listUsersWithProfiles();
     res.json({ users, total: users.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/firebase-users", async (_req, res) => {
+  try {
+    const listResult = await auth.listUsers(1000);
+    const users = listResult.users.map((u) => ({
+      uid: u.uid,
+      email: u.email || "",
+      display_name: u.displayName || "",
+      disabled: u.disabled,
+      custom_claims: u.customClaims || {},
+    }));
+    res.json({ users });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
@@ -412,36 +615,30 @@ app.post("/api/v1/admin/health-checks", async (_req, res) => {
 
     // AWS STS reachability
     try {
+      const stsConfig = {
+        region: process.env.AWS_REGION || "us-east-1",
+      };
       if (secrets.awsAccessKeyId && secrets.awsSecretAccessKey) {
-        const stsClient = new STSClient({
-          region: process.env.AWS_REGION || "us-east-1",
-          credentials: {
-            accessKeyId: secrets.awsAccessKeyId,
-            secretAccessKey: secrets.awsSecretAccessKey,
-            sessionToken: secrets.awsSessionToken || undefined,
-          },
-        });
-        const identity = await stsClient.send(new GetCallerIdentityCommand({}));
-        checks.push({
-          provider: "aws-sts",
-          ok: true,
-          message: "AWS STS reachable.",
-          details: identity,
-          checked_at: new Date().toISOString(),
-        });
-      } else {
-        checks.push({
-          provider: "aws-sts",
-          ok: false,
-          message: "AWS credentials missing for STS test.",
-          checked_at: new Date().toISOString(),
-        });
+        stsConfig.credentials = {
+          accessKeyId: secrets.awsAccessKeyId,
+          secretAccessKey: secrets.awsSecretAccessKey,
+          sessionToken: secrets.awsSessionToken || undefined,
+        };
       }
+      const stsClient = new STSClient(stsConfig);
+      const identity = await stsClient.send(new GetCallerIdentityCommand({}));
+      checks.push({
+        provider: "aws-sts",
+        ok: true,
+        message: "AWS STS reachable.",
+        details: identity,
+        checked_at: new Date().toISOString(),
+      });
     } catch (error) {
       checks.push({
         provider: "aws-sts",
         ok: false,
-        message: String(error),
+        message: `AWS auth failed. Ensure CLI/SSO is logged in or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY. ${String(error)}`,
         checked_at: new Date().toISOString(),
       });
     }
@@ -679,14 +876,8 @@ app.post("/api/v1/users/onboard", async (req, res) => {
       last_modified: now,
       access_template_id: payload.access_template_id || null,
       access_template: accessTemplate,
-      services: {
-        github: "pending",
-        slack: "pending",
-        microsoft365: "pending",
-        gcp: "pending",
-        aws: "pending",
-        portal: "pending",
-      },
+      services: getDefaultServicesForUser(payload.role, "active"),
+      service_synced_at: {},
     };
     await usersCollection().doc(firebaseUser.uid).set(profile);
 
@@ -724,9 +915,11 @@ app.post("/api/v1/users/onboard", async (req, res) => {
       provisioningSteps.push(...providerSteps);
       const servicePatch = {};
       const serviceMessages = {};
+      const serviceSyncedAt = {};
       let workflowFailureReason = null;
       for (const step of providerSteps) {
         if (step.service in profile.services) {
+          serviceSyncedAt[step.service] = new Date().toISOString();
           if (step.status !== "success") {
             servicePatch[step.service] = "failed";
             serviceMessages[step.service] = step.message || "Provider execution failed.";
@@ -749,6 +942,10 @@ app.post("/api/v1/users/onboard", async (req, res) => {
             ...servicePatch,
           },
           service_messages: serviceMessages,
+          service_synced_at: {
+            ...(profile.service_synced_at || {}),
+            ...serviceSyncedAt,
+          },
           workflow_failure_reason: workflowFailureReason,
           last_modified: new Date().toISOString(),
         },
@@ -873,25 +1070,37 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
         firebase_uid: id,
       });
       revocationSteps = [...revocationSteps, ...providerSteps];
+      const servicePatch = {};
+      const serviceMessages = {};
+      const serviceSyncedAt = {};
+      let workflowFailureReason = null;
+      for (const step of providerSteps) {
+        if (step.service in (profile?.services || {})) {
+          serviceSyncedAt[step.service] = new Date().toISOString();
+          if (step.status !== "success") {
+            servicePatch[step.service] = "failed";
+            serviceMessages[step.service] = step.message || "Provider deprovision failed.";
+            if (!workflowFailureReason) {
+              workflowFailureReason = `${step.label}: ${step.message || "failed"}`;
+            }
+          } else {
+            servicePatch[step.service] = "not_applicable";
+            serviceMessages[step.service] = step.message || "offboarded";
+          }
+        }
+      }
       await usersCollection().doc(id).set(
         {
           services: {
-            github: "not_applicable",
-            slack: "not_applicable",
-            microsoft365: "not_applicable",
-            gcp: "not_applicable",
-            aws: "not_applicable",
-            portal: "not_applicable",
+            ...(profile?.services || {}),
+            ...servicePatch,
           },
-          service_messages: {
-            github: "offboarded",
-            slack: "offboarded",
-            microsoft365: "offboarded",
-            gcp: "offboarded",
-            aws: "offboarded",
-            portal: "offboarded",
+          service_messages: serviceMessages,
+          service_synced_at: {
+            ...(profile?.service_synced_at || {}),
+            ...serviceSyncedAt,
           },
-          workflow_failure_reason: null,
+          workflow_failure_reason: workflowFailureReason,
         },
         { merge: true },
       );
@@ -947,9 +1156,11 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
       provisioning_steps = providerSteps;
       const servicePatch = {};
       const serviceMessages = {};
+      const serviceSyncedAt = {};
       let workflowFailureReason = null;
       for (const step of providerSteps) {
         if (step.service in (profile?.services || {})) {
+          serviceSyncedAt[step.service] = new Date().toISOString();
           if (step.status !== "success") {
             servicePatch[step.service] = "failed";
             serviceMessages[step.service] = step.message || "Provider execution failed.";
@@ -972,6 +1183,10 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
             ...servicePatch,
           },
           service_messages: serviceMessages,
+          service_synced_at: {
+            ...(profile?.service_synced_at || {}),
+            ...serviceSyncedAt,
+          },
           workflow_failure_reason: workflowFailureReason,
         },
         { merge: true },
@@ -984,6 +1199,1094 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
       { merge: true },
     );
     res.json({ workflow_execution: execution.name, provisioning_steps });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Applications registry
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/apps", async (_req, res) => {
+  try {
+    const snapshot = await applicationsCollection().orderBy("name").get();
+    const applications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.json({ applications, total: applications.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/apps/sync-history", async (_req, res) => {
+  try {
+    const snapshot = await appSyncHistoryCollection()
+      .orderBy("created_at", "desc")
+      .limit(20)
+      .get();
+    const runs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.json({ runs, total: runs.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/apps/:id", async (req, res) => {
+  try {
+    const ref = applicationsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Application not found." });
+    }
+    res.json({ application: { id: doc.id, ...doc.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.put("/api/v1/apps/:id", async (req, res) => {
+  try {
+    const ref = applicationsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Application not found." });
+    }
+    const allowed = ["name", "category", "environments", "owner_team", "default_template_id", "status"];
+    const patch = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) patch[key] = req.body[key];
+    }
+    patch.updated_at = new Date().toISOString();
+    await ref.set(patch, { merge: true });
+    const updated = await ref.get();
+    res.json({ application: { id: updated.id, ...updated.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/apps/seed", async (_req, res) => {
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const seedPath = join(dir, "seeds", "applications.initial.json");
+    const seedData = JSON.parse(readFileSync(seedPath, "utf8"));
+
+    const snapshot = await applicationsCollection().get();
+    const existingIds = new Set();
+    for (const doc of snapshot.docs) {
+      existingIds.add(doc.data().app_id || doc.id);
+    }
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors = [];
+    const now = new Date().toISOString();
+
+    for (const entry of seedData) {
+      if (!entry.app_id || !entry.name) {
+        errors.push(`Skipped invalid seed entry: ${JSON.stringify(entry).slice(0, 80)}`);
+        skipped++;
+        continue;
+      }
+      if (existingIds.has(entry.app_id)) {
+        const existing = snapshot.docs.find(
+          (d) => (d.data().app_id || d.id) === entry.app_id,
+        );
+        if (existing) {
+          await existing.ref.set({ ...entry, status: existing.data().status || "active", updated_at: now }, { merge: true });
+        }
+        updated++;
+      } else {
+        await applicationsCollection().doc(entry.app_id).set({
+          ...entry,
+          status: "active",
+          created_at: now,
+          updated_at: now,
+        });
+        created++;
+      }
+    }
+
+    const result = { created, updated, skipped, errors, synced_at: now, source: "seed-file" };
+    await appSyncHistoryCollection().add({ ...result, created_at: now });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/apps/sync", async (_req, res) => {
+  try {
+    const snapshot = await applicationsCollection().get();
+    const existing = new Map();
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      existing.set(data.app_id || doc.id, { ref: doc.ref, data });
+    }
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors = [];
+    const now = new Date().toISOString();
+
+    for (const [docId, entry] of existing) {
+      if (!entry.data.app_id || !entry.data.name) {
+        errors.push(`Invalid app record: ${docId} — missing app_id or name.`);
+        skipped++;
+        continue;
+      }
+      if (!entry.data.status) {
+        await entry.ref.set({ status: "active", updated_at: now }, { merge: true });
+        updated++;
+      } else {
+        skipped++;
+      }
+    }
+
+    const result = { created, updated, skipped, errors, synced_at: now };
+    await appSyncHistoryCollection().add({ ...result, created_at: now });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// App entitlements (user/group -> app access)
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/apps/:appId/entitlements", async (req, res) => {
+  try {
+    const snapshot = await appEntitlementsCollection()
+      .where("app_id", "==", req.params.appId)
+      .get();
+    const entitlements = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    res.json({ entitlements, total: entitlements.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/apps/:appId/entitlements", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const appId = req.params.appId;
+    if (!payload.subject_type || !payload.subject_id || !payload.role) {
+      return res.status(400).json({ error: "subject_type, subject_id, and role are required." });
+    }
+    if (!["user", "group"].includes(payload.subject_type)) {
+      return res.status(400).json({ error: "subject_type must be 'user' or 'group'." });
+    }
+    if (!["viewer", "editor", "admin", "owner"].includes(payload.role)) {
+      return res.status(400).json({ error: "role must be viewer, editor, admin, or owner." });
+    }
+
+    const appRef = applicationsCollection().doc(appId);
+    const appDoc = await appRef.get();
+    if (!appDoc.exists) {
+      return res.status(404).json({ error: "Application not found." });
+    }
+
+    const existing = await appEntitlementsCollection()
+      .where("app_id", "==", appId)
+      .where("subject_type", "==", payload.subject_type)
+      .where("subject_id", "==", payload.subject_id)
+      .limit(1)
+      .get();
+    if (!existing.empty) {
+      const doc = existing.docs[0];
+      await doc.ref.set(
+        {
+          role: payload.role,
+          capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : (doc.data().capabilities || []),
+          environments: payload.environments || appDoc.data().environments || [],
+          subject_label: payload.subject_label || doc.data().subject_label,
+          granted_by: payload.granted_by || "admin",
+          expires_at: payload.expires_at || null,
+          updated_at: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      const updated = await doc.ref.get();
+      await writeAuditEntry({ action: "entitlement.updated", app_id: appId, subject_type: payload.subject_type, subject_id: payload.subject_id, role: payload.role, actor: payload.granted_by || "admin" });
+      return res.json({ entitlement: { id: updated.id, ...updated.data() } });
+    }
+
+    const now = new Date().toISOString();
+    const docRef = await appEntitlementsCollection().add({
+      app_id: appId,
+      subject_type: payload.subject_type,
+      subject_id: payload.subject_id,
+      subject_label: payload.subject_label || payload.subject_id,
+      role: payload.role,
+      capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : [],
+      environments: payload.environments || appDoc.data().environments || [],
+      granted_by: payload.granted_by || "admin",
+      expires_at: payload.expires_at || null,
+      created_at: now,
+      updated_at: now,
+    });
+    const created = await docRef.get();
+    await writeAuditEntry({ action: "entitlement.granted", app_id: appId, subject_type: payload.subject_type, subject_id: payload.subject_id, role: payload.role, actor: payload.granted_by || "admin" });
+    res.status(201).json({ entitlement: { id: created.id, ...created.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.delete("/api/v1/apps/:appId/entitlements/:entId", async (req, res) => {
+  try {
+    const ref = appEntitlementsCollection().doc(req.params.entId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Entitlement not found." });
+    }
+    if (doc.data().app_id !== req.params.appId) {
+      return res.status(404).json({ error: "Entitlement does not belong to this app." });
+    }
+    const entData = doc.data();
+    await ref.delete();
+    await writeAuditEntry({ action: "entitlement.revoked", app_id: req.params.appId, subject_type: entData.subject_type, subject_id: entData.subject_id, role: entData.role, actor: "admin" });
+    res.json({ revoked: true, id: req.params.entId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// User groups
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/groups", async (_req, res) => {
+  try {
+    const snapshot = await groupsCollection().orderBy("name").get();
+    const groups = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.json({ groups, total: groups.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/groups/:id", async (req, res) => {
+  try {
+    const ref = groupsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+    res.json({ group: { id: doc.id, ...doc.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/groups", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.group_id || !payload.name) {
+      return res.status(400).json({ error: "group_id and name are required." });
+    }
+    if (!/^[a-z0-9][a-z0-9_-]*$/.test(payload.group_id)) {
+      return res.status(400).json({ error: "group_id must be lowercase alphanumeric with hyphens/underscores." });
+    }
+    const existing = await groupsCollection().doc(payload.group_id).get();
+    if (existing.exists) {
+      return res.status(409).json({ error: "A group with this ID already exists." });
+    }
+    const now = new Date().toISOString();
+    await groupsCollection().doc(payload.group_id).set({
+      group_id: payload.group_id,
+      name: payload.name.trim(),
+      description: (payload.description || "").trim(),
+      members: [],
+      created_at: now,
+      updated_at: now,
+    });
+    const created = await groupsCollection().doc(payload.group_id).get();
+    res.status(201).json({ group: { id: created.id, ...created.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.put("/api/v1/groups/:id", async (req, res) => {
+  try {
+    const ref = groupsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+    const allowed = ["name", "description"];
+    const patch = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) patch[key] = req.body[key];
+    }
+    patch.updated_at = new Date().toISOString();
+    await ref.set(patch, { merge: true });
+    const updated = await ref.get();
+    res.json({ group: { id: updated.id, ...updated.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.delete("/api/v1/groups/:id", async (req, res) => {
+  try {
+    const ref = groupsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+    const entSnapshot = await appEntitlementsCollection()
+      .where("subject_type", "==", "group")
+      .where("subject_id", "==", req.params.id)
+      .limit(1)
+      .get();
+    if (!entSnapshot.empty) {
+      return res.status(409).json({
+        error: "Group has active app entitlements. Revoke them before deleting.",
+      });
+    }
+    await ref.delete();
+    res.json({ deleted: true, id: req.params.id });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/groups/:id/members", async (req, res) => {
+  try {
+    const ref = groupsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+    const payload = req.body || {};
+    if (!payload.firebase_uid) {
+      return res.status(400).json({ error: "firebase_uid is required." });
+    }
+    const data = doc.data();
+    const members = data.members || [];
+    if (members.some((m) => m.firebase_uid === payload.firebase_uid)) {
+      return res.json({ group: { id: doc.id, ...data } });
+    }
+    members.push({
+      firebase_uid: payload.firebase_uid,
+      name: payload.name || "",
+      email: payload.email || "",
+      added_at: new Date().toISOString(),
+    });
+    await ref.set({ members, updated_at: new Date().toISOString() }, { merge: true });
+    await writeAuditEntry({ action: "group.member_added", group_id: req.params.id, firebase_uid: payload.firebase_uid, actor: "admin" });
+    const updated = await ref.get();
+    res.json({ group: { id: updated.id, ...updated.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.delete("/api/v1/groups/:id/members/:uid", async (req, res) => {
+  try {
+    const ref = groupsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+    const data = doc.data();
+    const members = (data.members || []).filter(
+      (m) => m.firebase_uid !== req.params.uid,
+    );
+    await ref.set({ members, updated_at: new Date().toISOString() }, { merge: true });
+    await writeAuditEntry({ action: "group.member_removed", group_id: req.params.id, firebase_uid: req.params.uid, actor: "admin" });
+    const updated = await ref.get();
+    res.json({ group: { id: updated.id, ...updated.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Effective access + Audit log + Bulk group assign
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/users/:id/effective-access", async (req, res) => {
+  try {
+    const uid = req.params.id;
+    const groupSnapshot = await groupsCollection().get();
+    const userGroupIds = [];
+    for (const doc of groupSnapshot.docs) {
+      const data = doc.data();
+      if ((data.members || []).some((m) => m.firebase_uid === uid)) {
+        userGroupIds.push(data.group_id || doc.id);
+      }
+    }
+
+    const entSnapshot = await appEntitlementsCollection().get();
+    const directEntitlements = [];
+    const groupEntitlements = [];
+    for (const doc of entSnapshot.docs) {
+      const ent = { id: doc.id, ...doc.data() };
+      if (ent.subject_type === "user" && ent.subject_id === uid) {
+        directEntitlements.push(ent);
+      } else if (
+        ent.subject_type === "group" &&
+        userGroupIds.includes(ent.subject_id)
+      ) {
+        groupEntitlements.push(ent);
+      }
+    }
+
+    const appIds = new Set([
+      ...directEntitlements.map((e) => e.app_id),
+      ...groupEntitlements.map((e) => e.app_id),
+    ]);
+    const appSnapshot = await applicationsCollection().get();
+    const appMap = {};
+    for (const doc of appSnapshot.docs) {
+      const data = doc.data();
+      appMap[data.app_id || doc.id] = { id: doc.id, ...data };
+    }
+
+    const capSnapshot = await appCapabilitiesCollection().get();
+    const capMap = {};
+    for (const doc of capSnapshot.docs) {
+      capMap[doc.id] = doc.data();
+    }
+
+    const effectiveAccess = [...appIds].map((appId) => {
+      const direct = directEntitlements.filter((e) => e.app_id === appId);
+      const viaGroup = groupEntitlements.filter((e) => e.app_id === appId);
+      const allGrants = [...direct, ...viaGroup];
+      const roleRank = { owner: 4, admin: 3, editor: 2, viewer: 1 };
+      allGrants.sort((a, b) => (roleRank[b.role] || 0) - (roleRank[a.role] || 0));
+      const best = allGrants[0];
+      const highestRole = best?.role;
+      let capabilities = [];
+      if (best) {
+        if (best.capabilities && best.capabilities.length > 0) {
+          capabilities = best.capabilities;
+        } else {
+          const presets = capMap[appId]?.role_presets || {};
+          capabilities = presets[highestRole] || (highestRole === "admin" || highestRole === "owner" ? ["*"] : []);
+        }
+      }
+      return {
+        app_id: appId,
+        app_name: appMap[appId]?.name || appId,
+        app_category: appMap[appId]?.category || "unknown",
+        effective_role: highestRole,
+        capabilities,
+        direct_grants: direct,
+        group_grants: viaGroup,
+      };
+    });
+
+    res.json({
+      firebase_uid: uid,
+      groups: userGroupIds,
+      effective_access: effectiveAccess,
+      total_apps: effectiveAccess.length,
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/audit-log", async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const snapshot = await auditLogCollection()
+      .orderBy("timestamp", "desc")
+      .limit(limit)
+      .get();
+    const entries = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.json({ entries, total: entries.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/audit-log/app/:appId", async (req, res) => {
+  try {
+    const snapshot = await auditLogCollection()
+      .where("app_id", "==", req.params.appId)
+      .get();
+    const entries = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+    res.json({ entries, total: entries.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/groups/:id/bulk-assign", async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const groupDoc = await groupsCollection().doc(groupId).get();
+    if (!groupDoc.exists) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+    const groupData = groupDoc.data();
+    const payload = req.body || {};
+    const appIds = payload.app_ids || [];
+    const role = payload.role || "viewer";
+    if (!Array.isArray(appIds) || appIds.length === 0) {
+      return res.status(400).json({ error: "app_ids array is required." });
+    }
+    if (!["viewer", "editor", "admin", "owner"].includes(role)) {
+      return res.status(400).json({ error: "role must be viewer, editor, admin, or owner." });
+    }
+    const now = new Date().toISOString();
+    let created = 0;
+    let updated = 0;
+    const errors = [];
+
+    for (const appId of appIds) {
+      try {
+        const appDoc = await applicationsCollection().doc(appId).get();
+        if (!appDoc.exists) {
+          errors.push(`App not found: ${appId}`);
+          continue;
+        }
+        const existing = await appEntitlementsCollection()
+          .where("app_id", "==", appId)
+          .where("subject_type", "==", "group")
+          .where("subject_id", "==", groupId)
+          .limit(1)
+          .get();
+        if (!existing.empty) {
+          const doc = existing.docs[0];
+          await doc.ref.set(
+            { role, updated_at: now },
+            { merge: true },
+          );
+          updated++;
+        } else {
+          await appEntitlementsCollection().add({
+            app_id: appId,
+            subject_type: "group",
+            subject_id: groupId,
+            subject_label: groupData.name || groupId,
+            role,
+            environments: appDoc.data().environments || [],
+            granted_by: payload.granted_by || "admin",
+            expires_at: null,
+            created_at: now,
+            updated_at: now,
+          });
+          created++;
+        }
+        await writeAuditEntry({ action: "entitlement.bulk_granted", app_id: appId, subject_type: "group", subject_id: groupId, role, actor: payload.granted_by || "admin" });
+      } catch (err) {
+        errors.push(`${appId}: ${String(err)}`);
+      }
+    }
+
+    res.json({ created, updated, errors, total_apps: appIds.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// App capabilities
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/apps/:appId/capabilities", async (req, res) => {
+  try {
+    const doc = await appCapabilitiesCollection().doc(req.params.appId).get();
+    if (!doc.exists) {
+      return res.json({
+        definition: {
+          app_id: req.params.appId,
+          capabilities: [],
+          role_presets: { viewer: [], editor: [], admin: ["*"], owner: ["*"] },
+          updated_at: null,
+        },
+      });
+    }
+    res.json({ definition: { app_id: doc.id, ...doc.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.put("/api/v1/apps/:appId/capabilities", async (req, res) => {
+  try {
+    const appId = req.params.appId;
+    const appDoc = await applicationsCollection().doc(appId).get();
+    if (!appDoc.exists) {
+      return res.status(404).json({ error: "Application not found." });
+    }
+    const payload = req.body || {};
+    if (!Array.isArray(payload.capabilities)) {
+      return res.status(400).json({ error: "capabilities array is required." });
+    }
+    for (const cap of payload.capabilities) {
+      if (!cap.key || !cap.label || !["view", "control"].includes(cap.category)) {
+        return res.status(400).json({
+          error: `Invalid capability: each must have key, label, and category (view|control). Got: ${JSON.stringify(cap)}`,
+        });
+      }
+    }
+    const now = new Date().toISOString();
+    const data = {
+      app_id: appId,
+      capabilities: payload.capabilities,
+      role_presets: payload.role_presets || { viewer: [], editor: [], admin: ["*"], owner: ["*"] },
+      updated_at: now,
+    };
+    await appCapabilitiesCollection().doc(appId).set(data);
+    await writeAuditEntry({ action: "capabilities.updated", app_id: appId, actor: "admin" });
+    res.json({ definition: data });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/authorize", async (req, res) => {
+  try {
+    const appId = String(req.query.app_id || "");
+    const uid = String(req.query.uid || "");
+    const env = String(req.query.env || "");
+    if (!appId || !uid) {
+      return res.status(400).json({ error: "app_id and uid are required query parameters." });
+    }
+
+    const groupSnapshot = await groupsCollection().get();
+    const userGroupIds = [];
+    for (const doc of groupSnapshot.docs) {
+      const data = doc.data();
+      if ((data.members || []).some((m) => m.firebase_uid === uid)) {
+        userGroupIds.push(data.group_id || doc.id);
+      }
+    }
+
+    const entSnapshot = await appEntitlementsCollection()
+      .where("app_id", "==", appId)
+      .get();
+    let bestRole = null;
+    let bestRank = 0;
+    let bestSource = "none";
+    let bestCapabilities = null;
+    let bestEnvironments = [];
+    const roleRank = { viewer: 1, editor: 2, admin: 3, owner: 4 };
+
+    for (const doc of entSnapshot.docs) {
+      const ent = doc.data();
+      const isDirectMatch = ent.subject_type === "user" && ent.subject_id === uid;
+      const isGroupMatch = ent.subject_type === "group" && userGroupIds.includes(ent.subject_id);
+      if (!isDirectMatch && !isGroupMatch) continue;
+      if (env && ent.environments && ent.environments.length > 0 && !ent.environments.includes(env)) continue;
+
+      const rank = roleRank[ent.role] || 0;
+      if (rank > bestRank) {
+        bestRank = rank;
+        bestRole = ent.role;
+        bestSource = isDirectMatch ? "direct" : "group";
+        bestCapabilities = ent.capabilities || null;
+        bestEnvironments = ent.environments || [];
+      }
+    }
+
+    if (!bestRole) {
+      return res.json({
+        authorized: false,
+        role: null,
+        capabilities: [],
+        source: "none",
+        environments: [],
+      });
+    }
+
+    const capabilities = await resolveCapabilities(appId, bestRole, bestCapabilities);
+    res.json({
+      authorized: true,
+      role: bestRole,
+      capabilities,
+      source: bestSource,
+      environments: bestEnvironments,
+    });
+  } catch (error) {
+    res.json({
+      authorized: false,
+      role: null,
+      capabilities: [],
+      source: "none",
+      environments: [],
+      error: String(error),
+    });
+  }
+});
+
+app.post("/api/v1/apps/capabilities/seed", async (_req, res) => {
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const seedPath = join(dir, "seeds", "app-capabilities.initial.json");
+    const seedData = JSON.parse(readFileSync(seedPath, "utf8"));
+
+    let created = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+
+    for (const entry of seedData) {
+      if (!entry.app_id || !Array.isArray(entry.capabilities)) continue;
+      const ref = appCapabilitiesCollection().doc(entry.app_id);
+      const existing = await ref.get();
+      await ref.set({ ...entry, updated_at: now });
+      if (existing.exists) updated++;
+      else created++;
+    }
+
+    res.json({ created, updated, synced_at: now, source: "seed-file" });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Settings endpoints (profile update, password change)
+// ---------------------------------------------------------------------------
+
+app.put("/api/v1/settings/profile", async (req, res) => {
+  try {
+    const { uid, displayName } = req.body || {};
+    if (!uid) return res.status(400).json({ error: "uid is required." });
+    const updates = {};
+    if (displayName !== undefined) updates.displayName = displayName;
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No fields to update." });
+    }
+    await auth.updateUser(uid, updates);
+    const updated = await auth.getUser(uid);
+    const profileRef = usersCollection().doc(uid);
+    const profileDoc = await profileRef.get();
+    if (profileDoc.exists && displayName) {
+      await profileRef.set(
+        { name: displayName, last_modified: new Date().toISOString() },
+        { merge: true },
+      );
+    }
+    res.json({
+      user: {
+        firebase_uid: updated.uid,
+        email: updated.email,
+        displayName: updated.displayName,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/settings/change-password", async (req, res) => {
+  try {
+    const { uid, newPassword } = req.body || {};
+    if (!uid || !newPassword) {
+      return res.status(400).json({ error: "uid and newPassword are required." });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+    await auth.updateUser(uid, { password: newPassword });
+    await writeAuditEntry({ action: "settings.password_changed", firebase_uid: uid, actor: uid });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin dashboard endpoints
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/admin/stats", async (_req, res) => {
+  try {
+    const [authUsers, appsSnap, groupsSnap, entSnap, auditSnap, capSnap] =
+      await Promise.all([
+        auth.listUsers(1000),
+        applicationsCollection().get(),
+        groupsCollection().get(),
+        appEntitlementsCollection().get(),
+        auditLogCollection().orderBy("timestamp", "desc").limit(10).get(),
+        appCapabilitiesCollection().get(),
+      ]);
+
+    const activeUsers = authUsers.users.filter((u) => !u.disabled).length;
+    const disabledUsers = authUsers.users.filter((u) => u.disabled).length;
+    const totalMembers = groupsSnap.docs.reduce(
+      (sum, doc) => sum + (doc.data().members || []).length,
+      0,
+    );
+    const appsWithCaps = capSnap.docs.filter(
+      (d) => (d.data().capabilities || []).length > 0,
+    ).length;
+
+    const recentAudit = auditSnap.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    res.json({
+      users: { total: authUsers.users.length, active: activeUsers, disabled: disabledUsers },
+      apps: { total: appsSnap.size, with_capabilities: appsWithCaps },
+      groups: { total: groupsSnap.size, total_members: totalMembers },
+      entitlements: { total: entSnap.size },
+      recent_audit: recentAudit,
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/notifications/welcome", async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: "email is required." });
+    const link = await auth.generatePasswordResetLink(email);
+    res.json({
+      success: true,
+      message: `Password reset link generated for ${email}. In production this would be emailed via Firebase.`,
+      reset_link: link,
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GitHub repo discovery + assignment
+// ---------------------------------------------------------------------------
+
+const GITHUB_ROLES = ["pull", "triage", "push", "maintain", "admin"];
+
+app.post("/api/v1/github/discover", async (_req, res) => {
+  try {
+    const secrets = await loadProviderSecrets();
+    if (!secrets.githubToken) {
+      return res.status(500).json({ error: "GitHub token not configured." });
+    }
+    const owner = process.env.GITHUB_ORG || "IggyIkenna";
+    const allRepos = [];
+    let page = 1;
+
+    const orgCheck = await fetch(`https://api.github.com/orgs/${owner}`, {
+      headers: { Authorization: `Bearer ${secrets.githubToken}`, Accept: "application/vnd.github+json" },
+    });
+    const isOrg = orgCheck.ok;
+    const listUrl = isOrg
+      ? `https://api.github.com/orgs/${owner}/repos`
+      : `https://api.github.com/user/repos`;
+
+    while (true) {
+      const resp = await fetch(
+        `${listUrl}?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
+        {
+          headers: {
+            Authorization: `Bearer ${secrets.githubToken}`,
+            Accept: "application/vnd.github+json",
+          },
+        },
+      );
+      if (!resp.ok) {
+        return res.status(502).json({ error: `GitHub API error: ${resp.status} ${await resp.text()}` });
+      }
+      const repos = await resp.json();
+      if (!Array.isArray(repos) || repos.length === 0) break;
+      allRepos.push(...repos);
+      if (repos.length < 100) break;
+      page++;
+    }
+
+    const now = new Date().toISOString();
+    const batch = firestore.batch();
+    for (const repo of allRepos) {
+      const ref = githubReposCollection().doc(String(repo.id));
+      batch.set(ref, {
+        id: repo.id,
+        name: repo.name,
+        full_name: repo.full_name,
+        private: repo.private,
+        description: repo.description || null,
+        default_branch: repo.default_branch || "main",
+        language: repo.language || null,
+        archived: repo.archived || false,
+        updated_at: repo.updated_at,
+        discovered_at: now,
+      });
+    }
+    await batch.commit();
+
+    res.json({
+      repos: allRepos.map((r) => ({
+        id: r.id,
+        name: r.name,
+        full_name: r.full_name,
+        private: r.private,
+        description: r.description,
+        default_branch: r.default_branch,
+        language: r.language,
+        archived: r.archived,
+        updated_at: r.updated_at,
+      })),
+      total: allRepos.length,
+      org: owner,
+      discovered_at: now,
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/github/repos", async (_req, res) => {
+  try {
+    const snapshot = await githubReposCollection().orderBy("name").get();
+    const repos = snapshot.docs.map((doc) => doc.data());
+    res.json({ repos, total: repos.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/github/assignments", async (req, res) => {
+  try {
+    const uid = req.query.uid;
+    const repo = req.query.repo;
+    let query = githubAssignmentsCollection().orderBy("created_at", "desc");
+    if (uid) query = githubAssignmentsCollection().where("firebase_uid", "==", uid);
+    if (repo) query = githubAssignmentsCollection().where("repo_full_name", "==", repo);
+    const snapshot = await query.get();
+    const assignments = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    res.json({ assignments, total: assignments.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/github/assignments", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.firebase_uid || !payload.github_handle || !payload.repo_full_name || !payload.role) {
+      return res.status(400).json({ error: "firebase_uid, github_handle, repo_full_name, and role are required." });
+    }
+    if (!GITHUB_ROLES.includes(payload.role)) {
+      return res.status(400).json({ error: `role must be one of: ${GITHUB_ROLES.join(", ")}` });
+    }
+
+    const secrets = await loadProviderSecrets();
+    if (!secrets.githubToken) {
+      return res.status(500).json({ error: "GitHub token not configured." });
+    }
+
+    const [owner, repo] = payload.repo_full_name.split("/");
+    const ghResp = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/collaborators/${encodeURIComponent(payload.github_handle)}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${secrets.githubToken}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ permission: payload.role }),
+      },
+    );
+    if (!ghResp.ok && ghResp.status !== 204) {
+      const body = await ghResp.text();
+      return res.status(502).json({ error: `GitHub collaborator add failed: ${ghResp.status} ${body}` });
+    }
+
+    const now = new Date().toISOString();
+    const existing = await githubAssignmentsCollection()
+      .where("firebase_uid", "==", payload.firebase_uid)
+      .where("repo_full_name", "==", payload.repo_full_name)
+      .limit(1)
+      .get();
+
+    if (!existing.empty) {
+      const doc = existing.docs[0];
+      await doc.ref.set(
+        { role: payload.role, github_handle: payload.github_handle, updated_at: now },
+        { merge: true },
+      );
+      const updated = await doc.ref.get();
+      await writeAuditEntry({
+        action: "github.repo_access_updated",
+        firebase_uid: payload.firebase_uid,
+        subject_id: payload.repo_full_name,
+        role: payload.role,
+        actor: payload.granted_by || "admin",
+      });
+      return res.json({ assignment: { id: updated.id, ...updated.data() } });
+    }
+
+    const docRef = await githubAssignmentsCollection().add({
+      firebase_uid: payload.firebase_uid,
+      github_handle: payload.github_handle,
+      repo_full_name: payload.repo_full_name,
+      role: payload.role,
+      granted_by: payload.granted_by || "admin",
+      created_at: now,
+      updated_at: now,
+    });
+    const created = await docRef.get();
+    await writeAuditEntry({
+      action: "github.repo_access_granted",
+      firebase_uid: payload.firebase_uid,
+      subject_id: payload.repo_full_name,
+      role: payload.role,
+      actor: payload.granted_by || "admin",
+    });
+    res.status(201).json({ assignment: { id: created.id, ...created.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.delete("/api/v1/github/assignments/:id", async (req, res) => {
+  try {
+    const ref = githubAssignmentsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Assignment not found." });
+    }
+    const data = doc.data();
+    const secrets = await loadProviderSecrets();
+    if (secrets.githubToken && data.repo_full_name && data.github_handle) {
+      const [owner, repo] = data.repo_full_name.split("/");
+      await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/collaborators/${encodeURIComponent(data.github_handle)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${secrets.githubToken}`,
+            Accept: "application/vnd.github+json",
+          },
+        },
+      );
+    }
+    await ref.delete();
+    await writeAuditEntry({
+      action: "github.repo_access_revoked",
+      firebase_uid: data.firebase_uid,
+      subject_id: data.repo_full_name,
+      role: data.role,
+      actor: "admin",
+    });
+    res.json({ revoked: true, id: req.params.id });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

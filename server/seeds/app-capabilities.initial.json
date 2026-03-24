@@ -1,0 +1,291 @@
+[
+  {
+    "app_id": "deployment-ui",
+    "capabilities": [
+      { "key": "deployments.view", "label": "View deployments", "category": "view" },
+      { "key": "deployments.trigger", "label": "Trigger deployments", "category": "control" },
+      { "key": "deployments.rollback", "label": "Rollback deployments", "category": "control" },
+      { "key": "config.view", "label": "View configuration", "category": "view" },
+      { "key": "config.edit", "label": "Edit configuration", "category": "control" },
+      { "key": "logs.view", "label": "View deployment logs", "category": "view" }
+    ],
+    "role_presets": {
+      "viewer": ["deployments.view", "config.view", "logs.view"],
+      "editor": ["deployments.view", "deployments.trigger", "config.view", "config.edit", "logs.view"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "strategy-ui",
+    "capabilities": [
+      { "key": "strategies.view", "label": "View strategies", "category": "view" },
+      { "key": "strategies.create", "label": "Create strategies", "category": "control" },
+      { "key": "strategies.edit", "label": "Edit strategies", "category": "control" },
+      { "key": "strategies.delete", "label": "Delete strategies", "category": "control" },
+      { "key": "backtests.view", "label": "View backtests", "category": "view" },
+      { "key": "backtests.run", "label": "Run backtests", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["strategies.view", "backtests.view"],
+      "editor": ["strategies.view", "strategies.create", "strategies.edit", "backtests.view", "backtests.run"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "execution-analytics-ui",
+    "capabilities": [
+      { "key": "executions.view", "label": "View executions", "category": "view" },
+      { "key": "analytics.view", "label": "View analytics", "category": "view" },
+      { "key": "reports.export", "label": "Export reports", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["executions.view", "analytics.view"],
+      "editor": ["executions.view", "analytics.view", "reports.export"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "trading-analytics-ui",
+    "capabilities": [
+      { "key": "trades.view", "label": "View trades", "category": "view" },
+      { "key": "pnl.view", "label": "View P&L", "category": "view" },
+      { "key": "reports.export", "label": "Export reports", "category": "control" },
+      { "key": "alerts.manage", "label": "Manage alerts", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["trades.view", "pnl.view"],
+      "editor": ["trades.view", "pnl.view", "reports.export", "alerts.manage"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "settlement-ui",
+    "capabilities": [
+      { "key": "positions.view", "label": "View positions", "category": "view" },
+      { "key": "settlements.view", "label": "View settlements", "category": "view" },
+      { "key": "settlements.approve", "label": "Approve settlements", "category": "control" },
+      { "key": "reports.export", "label": "Export reports", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["positions.view", "settlements.view"],
+      "editor": ["positions.view", "settlements.view", "reports.export"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "ml-training-ui",
+    "capabilities": [
+      { "key": "models.view", "label": "View models", "category": "view" },
+      { "key": "training.view", "label": "View training jobs", "category": "view" },
+      { "key": "training.launch", "label": "Launch training jobs", "category": "control" },
+      { "key": "models.deploy", "label": "Deploy models", "category": "control" },
+      { "key": "experiments.view", "label": "View experiments", "category": "view" }
+    ],
+    "role_presets": {
+      "viewer": ["models.view", "training.view", "experiments.view"],
+      "editor": ["models.view", "training.view", "training.launch", "experiments.view"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "live-health-monitor-ui",
+    "capabilities": [
+      { "key": "health.view", "label": "View service health", "category": "view" },
+      { "key": "alerts.view", "label": "View alerts", "category": "view" },
+      { "key": "alerts.acknowledge", "label": "Acknowledge alerts", "category": "control" },
+      { "key": "services.restart", "label": "Restart services", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["health.view", "alerts.view"],
+      "editor": ["health.view", "alerts.view", "alerts.acknowledge"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "logs-dashboard-ui",
+    "capabilities": [
+      { "key": "logs.view", "label": "View logs", "category": "view" },
+      { "key": "logs.search", "label": "Search logs", "category": "view" },
+      { "key": "logs.export", "label": "Export logs", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["logs.view", "logs.search"],
+      "editor": ["logs.view", "logs.search", "logs.export"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "batch-audit-ui",
+    "capabilities": [
+      { "key": "audits.view", "label": "View audits", "category": "view" },
+      { "key": "audits.search", "label": "Search audits", "category": "view" },
+      { "key": "audits.export", "label": "Export audit data", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["audits.view", "audits.search"],
+      "editor": ["audits.view", "audits.search", "audits.export"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "client-reporting-ui",
+    "capabilities": [
+      { "key": "reports.view", "label": "View reports", "category": "view" },
+      { "key": "reports.generate", "label": "Generate reports", "category": "control" },
+      { "key": "reports.send", "label": "Send reports to clients", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["reports.view"],
+      "editor": ["reports.view", "reports.generate"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "onboarding-ui",
+    "capabilities": [
+      { "key": "onboarding.view", "label": "View onboarding status", "category": "view" },
+      { "key": "onboarding.start", "label": "Start onboarding flow", "category": "control" },
+      { "key": "onboarding.approve", "label": "Approve onboarding", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["onboarding.view"],
+      "editor": ["onboarding.view", "onboarding.start"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "unified-admin-ui",
+    "capabilities": [
+      { "key": "dashboard.view", "label": "View admin dashboard", "category": "view" },
+      { "key": "config.view", "label": "View system config", "category": "view" },
+      { "key": "config.edit", "label": "Edit system config", "category": "control" },
+      { "key": "users.manage", "label": "Manage users", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["dashboard.view", "config.view"],
+      "editor": ["dashboard.view", "config.view", "config.edit"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "odum-research-website",
+    "capabilities": [
+      { "key": "portal.view", "label": "View portal content", "category": "view" },
+      { "key": "content.edit", "label": "Edit content", "category": "control" },
+      { "key": "content.publish", "label": "Publish content", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["portal.view"],
+      "editor": ["portal.view", "content.edit"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  },
+  {
+    "app_id": "deployment-api",
+    "capabilities": [
+      { "key": "deployments.read", "label": "Read deployments", "category": "view" },
+      { "key": "deployments.write", "label": "Write deployments", "category": "control" },
+      { "key": "deployments.admin", "label": "Admin deployment ops", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["deployments.read"], "editor": ["deployments.read", "deployments.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "config-api",
+    "capabilities": [
+      { "key": "config.read", "label": "Read config", "category": "view" },
+      { "key": "config.write", "label": "Write config", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["config.read"], "editor": ["config.read", "config.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "batch-audit-api",
+    "capabilities": [
+      { "key": "audits.read", "label": "Read audits", "category": "view" },
+      { "key": "audits.write", "label": "Write audits", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["audits.read"], "editor": ["audits.read", "audits.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "client-reporting-api",
+    "capabilities": [
+      { "key": "reports.read", "label": "Read reports", "category": "view" },
+      { "key": "reports.write", "label": "Generate reports", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["reports.read"], "editor": ["reports.read", "reports.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "execution-results-api",
+    "capabilities": [
+      { "key": "executions.read", "label": "Read executions", "category": "view" },
+      { "key": "executions.write", "label": "Write executions", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["executions.read"], "editor": ["executions.read", "executions.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "market-data-api",
+    "capabilities": [
+      { "key": "market-data.read", "label": "Read market data", "category": "view" },
+      { "key": "market-data.subscribe", "label": "Subscribe to streams", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["market-data.read"], "editor": ["market-data.read", "market-data.subscribe"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "ml-inference-api",
+    "capabilities": [
+      { "key": "predictions.read", "label": "Read predictions", "category": "view" },
+      { "key": "inference.invoke", "label": "Invoke inference", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["predictions.read"], "editor": ["predictions.read", "inference.invoke"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "ml-training-api",
+    "capabilities": [
+      { "key": "training.read", "label": "Read training jobs", "category": "view" },
+      { "key": "training.write", "label": "Submit training jobs", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["training.read"], "editor": ["training.read", "training.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "trading-analytics-api",
+    "capabilities": [
+      { "key": "analytics.read", "label": "Read analytics", "category": "view" },
+      { "key": "analytics.write", "label": "Write analytics config", "category": "control" }
+    ],
+    "role_presets": { "viewer": ["analytics.read"], "editor": ["analytics.read", "analytics.write"], "admin": ["*"], "owner": ["*"] }
+  },
+  {
+    "app_id": "user-management-ui",
+    "capabilities": [
+      { "key": "users.view", "label": "View users", "category": "view" },
+      { "key": "users.onboard", "label": "Onboard users", "category": "control" },
+      { "key": "users.modify", "label": "Modify users", "category": "control" },
+      { "key": "users.offboard", "label": "Offboard users", "category": "control" },
+      { "key": "apps.view", "label": "View applications", "category": "view" },
+      { "key": "apps.manage", "label": "Manage app access", "category": "control" },
+      { "key": "groups.view", "label": "View groups", "category": "view" },
+      { "key": "groups.manage", "label": "Manage groups", "category": "control" },
+      { "key": "audit.view", "label": "View audit log", "category": "view" },
+      { "key": "health.view", "label": "View health checks", "category": "view" },
+      { "key": "health.run", "label": "Run health checks", "category": "control" }
+    ],
+    "role_presets": {
+      "viewer": ["users.view", "apps.view", "groups.view", "audit.view", "health.view"],
+      "editor": ["users.view", "users.onboard", "users.modify", "apps.view", "apps.manage", "groups.view", "groups.manage", "audit.view", "health.view"],
+      "admin": ["*"],
+      "owner": ["*"]
+    }
+  }
+]

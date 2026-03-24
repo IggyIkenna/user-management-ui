@@ -30,9 +30,6 @@ export default defineConfig({
       url: "http://localhost:5184",
       reuseExistingServer: true,
       timeout: 120 * 1000,
-      env: {
-        VITE_SKIP_AUTH: "true",
-      },
     },
   ],
 });

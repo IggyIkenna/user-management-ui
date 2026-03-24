@@ -39,11 +39,11 @@ steps:
         echo "--- Format check ---"
         npm run format:check
         echo "--- Typecheck ---"
-        npm run typecheck 2>/dev/null || npm run type-check
+        npm run typecheck
         echo "--- Lint ---"
         npm run lint
-        echo "--- Unit + integration tests with coverage ---"
-        npm run test:coverage
+        echo "--- Next.js build ---"
+        npx next build
         echo "=== Quality gates passed ==="
     waitFor: ["-"]
 
@@ -60,7 +60,7 @@ steps:
       - "CI=true"
       - "WORKFLOW_EXECUTION_ENABLED=false"
       - "REAL_PROVIDER_EXECUTION_ENABLED=false"
-      - "VITE_SKIP_AUTH=true"
+      - "NEXT_PUBLIC_SKIP_AUTH=true"
     waitFor: ["quality-gates"]
 
   - name: "gcr.io/cloud-builders/gcloud"

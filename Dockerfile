@@ -1,31 +1,33 @@
-# Multi-stage build for user-management-ui
+# Multi-stage build for user-management-ui (Next.js)
 #
-# Stage 1: Node.js builder — install deps, build Vite SPA
-# Stage 2: Nginx runtime — serve static dist/ (lean; no node/npm in production)
+# Stage 1: Node.js builder — install deps, build Next.js
+# Stage 2: Node.js runtime — run Next.js + Express API
 #
-# Quality gates (typecheck + lint + vitest) run in cloudbuild.yaml BEFORE this build.
-# The Dockerfile is intentionally QG-free to keep the runtime image lean.
+# Quality gates (typecheck + lint + build) run in cloudbuild.yaml BEFORE this build.
 
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies first (layer caching)
 COPY package*.json ./
 RUN npm ci
 
-# Copy source and build
 COPY . .
 RUN npm run build
 
-# ── Production: nginx serving static files ───────────────────────────────────
-FROM nginx:alpine AS prod
+# ── Production: Node.js runtime ───────────────────────────────────
+FROM node:20-alpine AS prod
 
-# Copy built assets
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-# Copy nginx config if present, otherwise use default
-COPY nginx.conf /etc/nginx/conf.d/default.conf 2>/dev/null || true
+COPY --from=builder /app/package*.json ./
+RUN npm ci --omit=dev
 
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.mjs ./
+COPY --from=builder /app/server ./server
+
+EXPOSE 5184 8017
+
+CMD ["sh", "-c", "node server/index.js & npx next start -p 5184"]
