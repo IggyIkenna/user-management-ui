@@ -17,8 +17,11 @@ import {
   Cloud,
   Server,
   Globe,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -51,6 +54,13 @@ import {
   listUserWorkflowRuns,
   getEffectiveAccess,
 } from "@/lib/api/users";
+import {
+  listUserDocuments,
+  reviewDocument,
+  type UserDocument,
+} from "@/lib/api/onboarding-requests";
+import { changePassword } from "@/lib/api/settings";
+import { useAuth } from "@/hooks/use-auth";
 import { formatDateTime } from "@/lib/utils";
 import type {
   Person,
@@ -119,13 +129,21 @@ export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const userId = params.id;
+  const { user: sessionUser, isAdmin } = useAuth();
 
   const [user, setUser] = React.useState<Person | null>(null);
   const [workflows, setWorkflows] = React.useState<WorkflowRun[]>([]);
   const [access, setAccess] = React.useState<EffectiveAccessEntry[]>([]);
+  const [documents, setDocuments] = React.useState<UserDocument[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [reprovisioning, setReprovisioning] = React.useState(false);
+
+  const [adminNewPassword, setAdminNewPassword] = React.useState("");
+  const [adminConfirmPassword, setAdminConfirmPassword] = React.useState("");
+  const [adminPasswordSaving, setAdminPasswordSaving] = React.useState(false);
+  const [adminPasswordError, setAdminPasswordError] = React.useState("");
+  const [adminPasswordSuccess, setAdminPasswordSuccess] = React.useState(false);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -149,6 +167,12 @@ export default function UserDetailPage() {
       setAccess(accessRes.data.effective_access);
     } catch {
       setAccess([]);
+    }
+    try {
+      const docsRes = await listUserDocuments(userId);
+      setDocuments(docsRes.data.documents);
+    } catch {
+      setDocuments([]);
     } finally {
       setLoading(false);
     }
@@ -178,6 +202,39 @@ export default function UserDetailPage() {
       setReprovisioning(false);
     }
   };
+
+  const showAdminPasswordCard =
+    isAdmin() &&
+    sessionUser &&
+    user &&
+    user.firebase_uid !== sessionUser.firebase_uid;
+
+  async function handleAdminSetPassword() {
+    if (!user) return;
+    setAdminPasswordError("");
+    setAdminPasswordSuccess(false);
+    if (adminNewPassword.length < 6) {
+      setAdminPasswordError("Password must be at least 6 characters.");
+      return;
+    }
+    if (adminNewPassword !== adminConfirmPassword) {
+      setAdminPasswordError("Passwords do not match.");
+      return;
+    }
+    setAdminPasswordSaving(true);
+    try {
+      await changePassword(user.firebase_uid, adminNewPassword);
+      setAdminPasswordSuccess(true);
+      setAdminNewPassword("");
+      setAdminConfirmPassword("");
+    } catch (err) {
+      setAdminPasswordError(
+        err instanceof Error ? err.message : "Failed to set password",
+      );
+    } finally {
+      setAdminPasswordSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -339,6 +396,57 @@ export default function UserDetailPage() {
         </CardContent>
       </Card>
 
+      {showAdminPasswordCard && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lock className="size-4" />
+              Set password (admin)
+            </CardTitle>
+            <CardDescription>
+              Set a new password for {user.name}. They will use it on the next sign-in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 max-w-sm">
+            <div className="space-y-1.5">
+              <Label className="text-xs">New password</Label>
+              <Input
+                type="password"
+                value={adminNewPassword}
+                onChange={(e) => setAdminNewPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Confirm password</Label>
+              <Input
+                type="password"
+                value={adminConfirmPassword}
+                onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+              />
+            </div>
+            {adminPasswordError && (
+              <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+                {adminPasswordError}
+              </p>
+            )}
+            {adminPasswordSuccess && (
+              <p className="text-sm text-emerald-400">Password updated.</p>
+            )}
+            <Button
+              size="sm"
+              onClick={handleAdminSetPassword}
+              disabled={adminPasswordSaving}
+            >
+              {adminPasswordSaving ? "Saving…" : "Update password"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div>
         <h2 className="text-base font-semibold mb-3">Services</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -465,6 +573,89 @@ export default function UserDetailPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDateTime(run.updated_at)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      <Separator />
+
+      <div>
+        <h2 className="text-base font-semibold mb-3">Documents</h2>
+        {documents.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No documents uploaded.
+          </p>
+        ) : (
+          <div className="rounded-lg border border-border overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>File Name</TableHead>
+                  <TableHead>Review Status</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {documents.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell>
+                      <Badge variant="outline">{doc.doc_type}</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm max-w-[200px] truncate">
+                      {doc.file_name}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          doc.review_status === "approved"
+                            ? "default"
+                            : doc.review_status === "rejected"
+                              ? "destructive"
+                              : "outline"
+                        }
+                      >
+                        {doc.review_status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(doc.uploaded_at)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {doc.review_status !== "approved" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={async () => {
+                              await reviewDocument(userId, doc.id, "approved");
+                              loadData();
+                            }}
+                          >
+                            Approve
+                          </Button>
+                        )}
+                        {doc.review_status !== "rejected" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive"
+                            onClick={async () => {
+                              await reviewDocument(userId, doc.id, "rejected");
+                              loadData();
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

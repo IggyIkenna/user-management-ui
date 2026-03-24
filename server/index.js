@@ -98,6 +98,14 @@ function appCapabilitiesCollection() {
   return firestore.collection("app_capabilities");
 }
 
+function onboardingRequestsCollection() {
+  return firestore.collection("onboarding_requests");
+}
+
+function userDocumentsCollection() {
+  return firestore.collection("user_documents");
+}
+
 function githubReposCollection() {
   return firestore.collection("github_repos");
 }
@@ -177,6 +185,26 @@ async function resolveUserUid(inputId) {
   const query = await usersCollection().where("id", "==", inputId).limit(1).get();
   if (!query.empty) return query.docs[0].id;
   return inputId;
+}
+
+async function getActorFromRequest(req) {
+  const header = String(req.headers.authorization || "");
+  const m = /^Bearer\s+(.+)$/i.exec(header);
+  if (!m) return null;
+  try {
+    const decoded = await auth.verifyIdToken(m[1]);
+    return { uid: decoded.uid, decoded };
+  } catch {
+    return null;
+  }
+}
+
+async function isPlatformAdmin(uid) {
+  const snap = await usersCollection().doc(uid).get();
+  const profileRole = snap.exists ? snap.data()?.role : undefined;
+  if (profileRole === "admin") return true;
+  const rec = await auth.getUser(uid);
+  return rec.customClaims?.role === "admin";
 }
 
 async function getAccessTemplateById(templateId) {
@@ -309,7 +337,14 @@ async function listUsersWithProfiles() {
   return authUsers.users.map((u) => {
     const profile = profileMap.get(u.uid) || {};
     const role = profile.role || u.customClaims?.role || "client";
-    const status = u.disabled ? "offboarded" : "active";
+    const profileStatus = profile.status;
+    const status = profileStatus === "pending_approval"
+      ? "pending_approval"
+      : profileStatus === "rejected"
+        ? "rejected"
+        : u.disabled
+          ? "offboarded"
+          : "active";
     const defaultServices = getDefaultServicesForUser(role, status);
     return {
       id: profile.id || u.uid,
@@ -416,14 +451,14 @@ function serviceApplicability(role) {
 }
 
 function getDefaultServicesForUser(role, status) {
-  if (status === "offboarded") {
+  if (status === "offboarded" || status === "pending_approval" || status === "rejected") {
     return {
       github: "not_applicable",
       slack: "not_applicable",
       microsoft365: "not_applicable",
       gcp: "not_applicable",
       aws: "not_applicable",
-      portal: "not_applicable",
+      portal: status === "pending_approval" ? "pending" : "not_applicable",
     };
   }
   const applicability = serviceApplicability(role);
@@ -1975,6 +2010,13 @@ app.put("/api/v1/settings/profile", async (req, res) => {
   try {
     const { uid, displayName } = req.body || {};
     if (!uid) return res.status(400).json({ error: "uid is required." });
+    const actor = await getActorFromRequest(req);
+    if (!actor) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (uid !== actor.uid && !(await isPlatformAdmin(actor.uid))) {
+      return res.status(403).json({ error: "You can only update your own profile unless you are an admin." });
+    }
     const updates = {};
     if (displayName !== undefined) updates.displayName = displayName;
     if (Object.keys(updates).length === 0) {
@@ -2011,8 +2053,23 @@ app.post("/api/v1/settings/change-password", async (req, res) => {
     if (newPassword.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters." });
     }
-    await auth.updateUser(uid, { password: newPassword });
-    await writeAuditEntry({ action: "settings.password_changed", firebase_uid: uid, actor: uid });
+    const actor = await getActorFromRequest(req);
+    if (!actor) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    const targetUid = await resolveUserUid(uid);
+    if (targetUid !== actor.uid && !(await isPlatformAdmin(actor.uid))) {
+      return res.status(403).json({
+        error: "Only platform admins can change another user's password.",
+      });
+    }
+    await auth.updateUser(targetUid, { password: newPassword });
+    await writeAuditEntry({
+      action: "settings.password_changed",
+      firebase_uid: targetUid,
+      actor: actor.uid,
+      target_self: targetUid === actor.uid,
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2072,6 +2129,354 @@ app.post("/api/v1/notifications/welcome", async (req, res) => {
       message: `Password reset link generated for ${email}. In production this would be emailed via Firebase.`,
       reset_link: link,
     });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Self-service signup (creates pending_approval profile + onboarding request)
+// ---------------------------------------------------------------------------
+
+app.post("/api/v1/signup", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.email || !payload.name || !payload.password) {
+      return res.status(400).json({ error: "name, email, and password are required." });
+    }
+    if (payload.password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+
+    const firebaseUser = await auth.createUser({
+      email: payload.email,
+      displayName: payload.name,
+      password: payload.password,
+      disabled: true,
+    });
+
+    await auth.setCustomUserClaims(firebaseUser.uid, {
+      role: "client",
+      source: "self-signup",
+    });
+
+    const now = new Date().toISOString();
+    const profile = {
+      id: firebaseUser.uid,
+      name: payload.name,
+      email: payload.email,
+      role: "client",
+      status: "pending_approval",
+      company: payload.company || null,
+      phone: payload.phone || null,
+      provisioned_at: null,
+      last_modified: now,
+      created_at: now,
+      services: getDefaultServicesForUser("client", "pending_approval"),
+    };
+    await usersCollection().doc(firebaseUser.uid).set(profile);
+
+    const requestDoc = {
+      firebase_uid: firebaseUser.uid,
+      applicant_name: payload.name,
+      applicant_email: payload.email,
+      company: payload.company || null,
+      phone: payload.phone || null,
+      service_type: payload.service_type || "general",
+      selected_options: payload.selected_options || [],
+      expected_aum: payload.expected_aum || null,
+      status: "pending",
+      reviewer_uid: null,
+      review_note: "",
+      created_at: now,
+      updated_at: now,
+    };
+    const reqRef = await onboardingRequestsCollection().add(requestDoc);
+
+    await writeAuditEntry({
+      action: "signup.submitted",
+      firebase_uid: firebaseUser.uid,
+      applicant_email: payload.email,
+      onboarding_request_id: reqRef.id,
+      actor: "self",
+    });
+
+    res.status(201).json({
+      user: { ...profile, firebase_uid: firebaseUser.uid },
+      onboarding_request_id: reqRef.id,
+    });
+  } catch (error) {
+    if (String(error).includes("email-already-exists")) {
+      return res.status(409).json({ error: "An account with this email already exists." });
+    }
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Onboarding requests (admin queue)
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/onboarding-requests", async (req, res) => {
+  try {
+    const status = req.query.status;
+    let query = onboardingRequestsCollection().orderBy("created_at", "desc");
+    if (status) {
+      query = onboardingRequestsCollection()
+        .where("status", "==", status)
+        .orderBy("created_at", "desc");
+    }
+    const snapshot = await query.limit(200).get();
+    const requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.json({ requests, total: requests.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/onboarding-requests/:id", async (req, res) => {
+  try {
+    const ref = onboardingRequestsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Onboarding request not found." });
+    }
+    const docsSnapshot = await userDocumentsCollection()
+      .where("onboarding_request_id", "==", req.params.id)
+      .get();
+    const documents = docsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ request: { id: doc.id, ...doc.data() }, documents });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!(await isPlatformAdmin(actor.uid))) {
+      return res.status(403).json({ error: "Only admins can approve requests." });
+    }
+
+    const ref = onboardingRequestsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Onboarding request not found." });
+    }
+    const request = doc.data();
+    if (request.status !== "pending") {
+      return res.status(409).json({ error: `Request is already ${request.status}.` });
+    }
+
+    const now = new Date().toISOString();
+    const note = req.body?.note || "";
+    const role = req.body?.role || "client";
+
+    await auth.updateUser(request.firebase_uid, { disabled: false });
+    await auth.setCustomUserClaims(request.firebase_uid, { role, source: "admin-approved" });
+
+    await usersCollection().doc(request.firebase_uid).set(
+      {
+        status: "active",
+        role,
+        provisioned_at: now,
+        last_modified: now,
+        services: getDefaultServicesForUser(role, "active"),
+      },
+      { merge: true },
+    );
+
+    await ref.set(
+      {
+        status: "approved",
+        reviewer_uid: actor.uid,
+        review_note: note,
+        updated_at: now,
+      },
+      { merge: true },
+    );
+
+    await writeAuditEntry({
+      action: "signup.approved",
+      firebase_uid: request.firebase_uid,
+      onboarding_request_id: req.params.id,
+      reviewer_uid: actor.uid,
+      note,
+      actor: actor.uid,
+    });
+
+    res.json({
+      request: { id: doc.id, ...(await ref.get()).data() },
+      user_status: "active",
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!(await isPlatformAdmin(actor.uid))) {
+      return res.status(403).json({ error: "Only admins can reject requests." });
+    }
+
+    const ref = onboardingRequestsCollection().doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Onboarding request not found." });
+    }
+    const request = doc.data();
+    if (request.status !== "pending") {
+      return res.status(409).json({ error: `Request is already ${request.status}.` });
+    }
+
+    const now = new Date().toISOString();
+    const note = req.body?.note || "";
+    const deleteUser = req.body?.delete_user === true;
+
+    if (deleteUser) {
+      try {
+        await auth.deleteUser(request.firebase_uid);
+      } catch {
+        /* user may already be deleted */
+      }
+      await usersCollection().doc(request.firebase_uid).delete();
+    } else {
+      await usersCollection().doc(request.firebase_uid).set(
+        { status: "rejected", last_modified: now },
+        { merge: true },
+      );
+    }
+
+    await ref.set(
+      {
+        status: "rejected",
+        reviewer_uid: actor.uid,
+        review_note: note,
+        updated_at: now,
+      },
+      { merge: true },
+    );
+
+    await writeAuditEntry({
+      action: "signup.rejected",
+      firebase_uid: request.firebase_uid,
+      onboarding_request_id: req.params.id,
+      reviewer_uid: actor.uid,
+      note,
+      deleted: deleteUser,
+      actor: actor.uid,
+    });
+
+    res.json({ request: { id: doc.id, ...(await ref.get()).data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// User documents (metadata — files stored in Firebase Storage by client)
+// ---------------------------------------------------------------------------
+
+app.get("/api/v1/users/:uid/documents", async (req, res) => {
+  try {
+    const snapshot = await userDocumentsCollection()
+      .where("firebase_uid", "==", req.params.uid)
+      .orderBy("uploaded_at", "desc")
+      .get();
+    const documents = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.json({ documents, total: documents.length });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/users/:uid/documents", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.doc_type || !payload.file_name || !payload.storage_path) {
+      return res.status(400).json({ error: "doc_type, file_name, and storage_path are required." });
+    }
+
+    const now = new Date().toISOString();
+    const docRef = await userDocumentsCollection().add({
+      firebase_uid: req.params.uid,
+      onboarding_request_id: payload.onboarding_request_id || null,
+      doc_type: payload.doc_type,
+      file_name: payload.file_name,
+      storage_path: payload.storage_path,
+      content_type: payload.content_type || "application/octet-stream",
+      review_status: "pending",
+      review_note: "",
+      uploaded_at: now,
+      updated_at: now,
+    });
+    const created = await docRef.get();
+
+    await writeAuditEntry({
+      action: "document.uploaded",
+      firebase_uid: req.params.uid,
+      document_id: docRef.id,
+      doc_type: payload.doc_type,
+      actor: "user",
+    });
+
+    res.status(201).json({ document: { id: created.id, ...created.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!(await isPlatformAdmin(actor.uid))) {
+      return res.status(403).json({ error: "Only admins can review documents." });
+    }
+
+    const ref = userDocumentsCollection().doc(req.params.docId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Document not found." });
+    }
+    if (doc.data().firebase_uid !== req.params.uid) {
+      return res.status(404).json({ error: "Document does not belong to this user." });
+    }
+
+    const status = req.body?.status;
+    if (!["approved", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({ error: "status must be approved, rejected, or pending." });
+    }
+
+    await ref.set(
+      {
+        review_status: status,
+        review_note: req.body?.note || "",
+        reviewed_by: actor.uid,
+        updated_at: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+
+    await writeAuditEntry({
+      action: `document.${status}`,
+      firebase_uid: req.params.uid,
+      document_id: req.params.docId,
+      actor: actor.uid,
+    });
+
+    const updated = await ref.get();
+    res.json({ document: { id: updated.id, ...updated.data() } });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

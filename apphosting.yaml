@@ -1,4 +1,6 @@
-# App Hosting runtime overrides for Next.js + Express sidecar API.
+# Firebase App Hosting — Next.js runtime (see docs/FIREBASE_DEPLOYMENT.md).
+# USER_MGMT_API_URL is the HTTPS base for the Express API in server/ (usually Cloud Run).
+# Firebase Hosting (firebase.json → hosting) deploys public/ separately as static assets.
 runConfig:
   memoryMiB: 1024
 

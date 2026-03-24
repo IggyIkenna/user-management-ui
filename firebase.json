@@ -1,7 +1,16 @@
 {
   "apphosting": {
     "backendId": "user-management-ui",
-    "rootDir": "."
+    "rootDir": ".",
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".next",
+      "coverage",
+      "test-results",
+      "playwright-report",
+      ".firebase"
+    ]
   },
   "hosting": {
     "site": "central-element-323112",

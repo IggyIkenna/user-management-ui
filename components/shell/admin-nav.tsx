@@ -30,6 +30,7 @@ import {
   User,
   ChevronDown,
   GitBranch,
+  Inbox,
 } from "lucide-react";
 
 interface NavSection {
@@ -46,6 +47,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Users,
     items: [
       { label: "Users", href: "/users", icon: Users },
+      { label: "Signup Requests", href: "/requests", icon: Inbox },
       { label: "Onboard", href: "/onboard", icon: UserPlus },
       { label: "Groups", href: "/groups", icon: UsersRound },
       { label: "Templates", href: "/templates", icon: Shield },
