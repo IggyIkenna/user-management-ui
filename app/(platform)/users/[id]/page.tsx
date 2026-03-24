@@ -18,8 +18,6 @@ import {
   Server,
   Globe,
   Lock,
-  Download,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +57,6 @@ import {
 import {
   listUserDocuments,
   reviewDocument,
-  getDocumentDownloadUrl,
   type UserDocument,
 } from "@/lib/api/onboarding-requests";
 import { changePassword } from "@/lib/api/settings";
@@ -142,10 +139,6 @@ export default function UserDetailPage() {
   const [error, setError] = React.useState("");
   const [reprovisioning, setReprovisioning] = React.useState(false);
 
-  const [downloadingDocId, setDownloadingDocId] = React.useState<string | null>(
-    null,
-  );
-
   const [adminNewPassword, setAdminNewPassword] = React.useState("");
   const [adminConfirmPassword, setAdminConfirmPassword] = React.useState("");
   const [adminPasswordSaving, setAdminPasswordSaving] = React.useState(false);
@@ -207,24 +200,6 @@ export default function UserDetailPage() {
       setReprovisioning(false);
     }
   };
-
-  async function handleDocDownload(docId: string) {
-    setDownloadingDocId(docId);
-    const newTab = window.open("about:blank", "_blank");
-    try {
-      const res = await getDocumentDownloadUrl(userId, docId);
-      if (newTab) {
-        newTab.location.href = res.data.url;
-      } else {
-        window.location.assign(res.data.url);
-      }
-    } catch {
-      if (newTab) newTab.close();
-      setError("Failed to get download link.");
-    } finally {
-      setDownloadingDocId(null);
-    }
-  }
 
   const showAdminPasswordCard =
     isAdmin() &&
@@ -427,8 +402,7 @@ export default function UserDetailPage() {
               Set password (admin)
             </CardTitle>
             <CardDescription>
-              Set a new password for {user.name}. They will use it on the next
-              sign-in.
+              Set a new password for {user.name}. They will use it on the next sign-in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 max-w-sm">
@@ -652,27 +626,12 @@ export default function UserDetailPage() {
                       {formatDateTime(doc.uploaded_at)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2 flex-wrap items-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs px-2 whitespace-nowrap"
-                          title="View document"
-                          disabled={downloadingDocId === doc.id}
-                          onClick={() => handleDocDownload(doc.id)}
-                        >
-                          {downloadingDocId === doc.id ? (
-                            <Loader2 className="size-3 animate-spin mr-1" />
-                          ) : (
-                            <Download className="size-3 mr-1" />
-                          )}
-                          View
-                        </Button>
+                      <div className="flex gap-1">
                         {doc.review_status !== "approved" && (
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="h-7 text-xs px-2 whitespace-nowrap text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
+                            className="h-7 text-xs"
                             onClick={async () => {
                               await reviewDocument(userId, doc.id, "approved");
                               loadData();
@@ -683,9 +642,9 @@ export default function UserDetailPage() {
                         )}
                         {doc.review_status !== "rejected" && (
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="h-7 text-xs px-2 whitespace-nowrap text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive/80"
+                            className="h-7 text-xs text-destructive"
                             onClick={async () => {
                               await reviewDocument(userId, doc.id, "rejected");
                               loadData();

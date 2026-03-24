@@ -113,41 +113,6 @@ function userDocumentsCollection() {
   return firestore.collection("user_documents");
 }
 
-function notificationPreferencesCollection() {
-  return firestore.collection("notification_preferences");
-}
-
-function sanitizeFileName(fileName) {
-  return String(fileName || "document.bin").replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-async function createUserDocumentRecord(uid, payload, actor = "user") {
-  const now = new Date().toISOString();
-  const docRef = await userDocumentsCollection().add({
-    firebase_uid: uid,
-    onboarding_request_id: payload.onboarding_request_id || null,
-    doc_type: payload.doc_type,
-    file_name: payload.file_name,
-    storage_path: payload.storage_path,
-    content_type: payload.content_type || "application/octet-stream",
-    review_status: "pending",
-    review_note: "",
-    uploaded_at: now,
-    updated_at: now,
-  });
-  const created = await docRef.get();
-
-  await writeAuditEntry({
-    action: "document.uploaded",
-    firebase_uid: uid,
-    document_id: docRef.id,
-    doc_type: payload.doc_type,
-    actor,
-  });
-
-  return { id: created.id, ...created.data() };
-}
-
 function githubReposCollection() {
   return firestore.collection("github_repos");
 }
@@ -418,14 +383,13 @@ async function listUsersWithProfiles() {
     const profile = profileMap.get(u.uid) || {};
     const role = profile.role || u.customClaims?.role || "client";
     const profileStatus = profile.status;
-    const status =
-      profileStatus === "pending_approval"
-        ? "pending_approval"
-        : profileStatus === "rejected"
-          ? "rejected"
-          : u.disabled
-            ? "offboarded"
-            : "active";
+    const status = profileStatus === "pending_approval"
+      ? "pending_approval"
+      : profileStatus === "rejected"
+        ? "rejected"
+        : u.disabled
+          ? "offboarded"
+          : "active";
     const defaultServices = getDefaultServicesForUser(role, status);
     return {
       id: profile.id || u.uid,
@@ -532,11 +496,7 @@ function serviceApplicability(role) {
 }
 
 function getDefaultServicesForUser(role, status) {
-  if (
-    status === "offboarded" ||
-    status === "pending_approval" ||
-    status === "rejected"
-  ) {
+  if (status === "offboarded" || status === "pending_approval" || status === "rejected") {
     return {
       github: "not_applicable",
       slack: "not_applicable",
@@ -2276,9 +2236,7 @@ app.put("/api/v1/settings/profile", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (uid !== actor.uid && !(await isPlatformAdmin(actor.uid))) {
-      return res.status(403).json({
-        error: "You can only update your own profile unless you are an admin.",
-      });
+      return res.status(403).json({ error: "You can only update your own profile unless you are an admin." });
     }
     const updates = {};
     if (displayName !== undefined) updates.displayName = displayName;
@@ -2413,14 +2371,10 @@ app.post("/api/v1/signup", async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.email || !payload.name || !payload.password) {
-      return res
-        .status(400)
-        .json({ error: "name, email, and password are required." });
+      return res.status(400).json({ error: "name, email, and password are required." });
     }
     if (payload.password.length < 6) {
-      return res
-        .status(400)
-        .json({ error: "Password must be at least 6 characters." });
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
     }
 
     const firebaseUser = await auth.createUser({
@@ -2476,29 +2430,13 @@ app.post("/api/v1/signup", async (req, res) => {
       actor: "self",
     });
 
-    try {
-      await sendEmail({
-        to: payload.email,
-        subject: "Application received — under review",
-        html: `<p>Hi ${payload.name},</p><p>Thank you for your application. Our team is reviewing your submission and you will receive an email once a decision has been made.</p><p>Your application reference: <strong>${reqRef.id}</strong></p>`,
-      });
-      await notifyAdminsForEvent("signup_submitted", {
-        subject: `New signup requires review: ${payload.email}`,
-        html: `<p>A new account application has been submitted:</p><ul><li><strong>Name:</strong> ${payload.name}</li><li><strong>Email:</strong> ${payload.email}</li><li><strong>Company:</strong> ${payload.company || "N/A"}</li><li><strong>Service:</strong> ${payload.service_type || "general"}</li></ul><p>Please review in the admin dashboard.</p>`,
-      });
-    } catch {
-      /* email is best-effort */
-    }
-
     res.status(201).json({
       user: { ...profile, firebase_uid: firebaseUser.uid },
       onboarding_request_id: reqRef.id,
     });
   } catch (error) {
     if (String(error).includes("email-already-exists")) {
-      return res
-        .status(409)
-        .json({ error: "An account with this email already exists." });
+      return res.status(409).json({ error: "An account with this email already exists." });
     }
     res.status(500).json({ error: String(error) });
   }
@@ -2518,10 +2456,7 @@ app.get("/api/v1/onboarding-requests", async (req, res) => {
         .orderBy("created_at", "desc");
     }
     const snapshot = await query.limit(200).get();
-    const requests = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json({ requests, total: requests.length });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2552,9 +2487,7 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res
-        .status(403)
-        .json({ error: "Only admins can approve requests." });
+      return res.status(403).json({ error: "Only admins can approve requests." });
     }
 
     const ref = onboardingRequestsCollection().doc(req.params.id);
@@ -2564,36 +2497,26 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
     }
     const request = doc.data();
     if (request.status !== "pending") {
-      return res
-        .status(409)
-        .json({ error: `Request is already ${request.status}.` });
+      return res.status(409).json({ error: `Request is already ${request.status}.` });
     }
 
     const now = new Date().toISOString();
     const note = req.body?.note || "";
     const role = req.body?.role || "client";
-    const appGrants = Array.isArray(req.body?.app_grants)
-      ? req.body.app_grants
-      : [];
 
     await auth.updateUser(request.firebase_uid, { disabled: false });
-    await auth.setCustomUserClaims(request.firebase_uid, {
-      role,
-      source: "admin-approved",
-    });
+    await auth.setCustomUserClaims(request.firebase_uid, { role, source: "admin-approved" });
 
-    await usersCollection()
-      .doc(request.firebase_uid)
-      .set(
-        {
-          status: "active",
-          role,
-          provisioned_at: now,
-          last_modified: now,
-          services: getDefaultServicesForUser(role, "active"),
-        },
-        { merge: true },
-      );
+    await usersCollection().doc(request.firebase_uid).set(
+      {
+        status: "active",
+        role,
+        provisioned_at: now,
+        last_modified: now,
+        services: getDefaultServicesForUser(role, "active"),
+      },
+      { merge: true },
+    );
 
     await ref.set(
       {
@@ -2605,68 +2528,18 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
       { merge: true },
     );
 
-    const grantedApps = [];
-    for (const grant of appGrants) {
-      if (!grant.app_id) continue;
-      const existing = await appEntitlementsCollection()
-        .where("app_id", "==", grant.app_id)
-        .where("subject_type", "==", "user")
-        .where("subject_id", "==", request.firebase_uid)
-        .limit(1)
-        .get();
-      if (!existing.empty) {
-        await existing.docs[0].ref.set(
-          {
-            role: grant.role || "viewer",
-            environments: grant.environments || ["prod"],
-            updated_at: now,
-          },
-          { merge: true },
-        );
-      } else {
-        await appEntitlementsCollection().add({
-          app_id: grant.app_id,
-          subject_type: "user",
-          subject_id: request.firebase_uid,
-          subject_label: request.applicant_name || request.applicant_email,
-          role: grant.role || "viewer",
-          environments: grant.environments || ["prod"],
-          granted_by: actor.uid,
-          created_at: now,
-          updated_at: now,
-        });
-      }
-      grantedApps.push(grant.app_id);
-    }
-
     await writeAuditEntry({
       action: "signup.approved",
       firebase_uid: request.firebase_uid,
       onboarding_request_id: req.params.id,
       reviewer_uid: actor.uid,
       note,
-      granted_apps: grantedApps,
       actor: actor.uid,
     });
-
-    try {
-      await sendEmail({
-        to: request.applicant_email,
-        subject: "Your account has been approved",
-        html: `<h2>Welcome!</h2><p>Hi ${request.applicant_name || "there"},</p><p>Your account has been approved and is now active. You can log in using the email and password you registered with.</p>${note ? `<p><strong>Reviewer note:</strong> ${note}</p>` : ""}<p>Thank you for joining us.</p>`,
-      });
-      await notifyAdminsForEvent("signup_approved", {
-        subject: `Account approved: ${request.applicant_email}`,
-        html: `<p><strong>${request.applicant_name}</strong> (${request.applicant_email}) has been approved by admin.</p>${grantedApps.length > 0 ? `<p>Granted apps: ${grantedApps.join(", ")}</p>` : ""}`,
-      });
-    } catch {
-      /* email is best-effort */
-    }
 
     res.json({
       request: { id: doc.id, ...(await ref.get()).data() },
       user_status: "active",
-      granted_apps: grantedApps,
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2680,9 +2553,7 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res
-        .status(403)
-        .json({ error: "Only admins can reject requests." });
+      return res.status(403).json({ error: "Only admins can reject requests." });
     }
 
     const ref = onboardingRequestsCollection().doc(req.params.id);
@@ -2692,9 +2563,7 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
     }
     const request = doc.data();
     if (request.status !== "pending") {
-      return res
-        .status(409)
-        .json({ error: `Request is already ${request.status}.` });
+      return res.status(409).json({ error: `Request is already ${request.status}.` });
     }
 
     const now = new Date().toISOString();
@@ -2709,9 +2578,10 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
       }
       await usersCollection().doc(request.firebase_uid).delete();
     } else {
-      await usersCollection()
-        .doc(request.firebase_uid)
-        .set({ status: "rejected", last_modified: now }, { merge: true });
+      await usersCollection().doc(request.firebase_uid).set(
+        { status: "rejected", last_modified: now },
+        { merge: true },
+      );
     }
 
     await ref.set(
@@ -2734,20 +2604,6 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
       actor: actor.uid,
     });
 
-    try {
-      await sendEmail({
-        to: request.applicant_email,
-        subject: "Update on your application",
-        html: `<p>Hi ${request.applicant_name || "there"},</p><p>We have reviewed your application and unfortunately we are unable to proceed at this time.</p>${note ? `<p><strong>Note:</strong> ${note}</p>` : ""}<p>If you have questions, please contact our support team.</p>`,
-      });
-      await notifyAdminsForEvent("signup_rejected", {
-        subject: `Application rejected: ${request.applicant_email}`,
-        html: `<p><strong>${request.applicant_name}</strong> (${request.applicant_email}) application was rejected.</p>${note ? `<p>Note: ${note}</p>` : ""}`,
-      });
-    } catch {
-      /* email is best-effort */
-    }
-
     res.json({ request: { id: doc.id, ...(await ref.get()).data() } });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2762,10 +2618,9 @@ app.get("/api/v1/users/:uid/documents", async (req, res) => {
   try {
     const snapshot = await userDocumentsCollection()
       .where("firebase_uid", "==", req.params.uid)
+      .orderBy("uploaded_at", "desc")
       .get();
-    const documents = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || ""));
+    const documents = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json({ documents, total: documents.length });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2776,67 +2631,33 @@ app.post("/api/v1/users/:uid/documents", async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.doc_type || !payload.file_name || !payload.storage_path) {
-      return res
-        .status(400)
-        .json({ error: "doc_type, file_name, and storage_path are required." });
-    }
-    const document = await createUserDocumentRecord(
-      req.params.uid,
-      payload,
-      "user",
-    );
-    res.status(201).json({ document });
-  } catch (error) {
-    res.status(500).json({ error: String(error) });
-  }
-});
-
-app.post("/api/v1/users/:uid/documents/upload", async (req, res) => {
-  try {
-    const payload = req.body || {};
-    if (
-      !payload.doc_type ||
-      !payload.file_name ||
-      !payload.content_type ||
-      !payload.file_base64
-    ) {
-      return res.status(400).json({
-        error:
-          "doc_type, file_name, content_type, and file_base64 are required.",
-      });
+      return res.status(400).json({ error: "doc_type, file_name, and storage_path are required." });
     }
 
-    const safeFileName = sanitizeFileName(payload.file_name);
-    const storagePath = `onboarding-docs/${req.params.uid}/${payload.onboarding_request_id || "draft"}/${Date.now()}-${payload.doc_type}-${safeFileName}`;
-    const storageFile = storageBucket.file(storagePath);
-    const fileBuffer = Buffer.from(String(payload.file_base64), "base64");
+    const now = new Date().toISOString();
+    const docRef = await userDocumentsCollection().add({
+      firebase_uid: req.params.uid,
+      onboarding_request_id: payload.onboarding_request_id || null,
+      doc_type: payload.doc_type,
+      file_name: payload.file_name,
+      storage_path: payload.storage_path,
+      content_type: payload.content_type || "application/octet-stream",
+      review_status: "pending",
+      review_note: "",
+      uploaded_at: now,
+      updated_at: now,
+    });
+    const created = await docRef.get();
 
-    await storageFile.save(fileBuffer, {
-      contentType: payload.content_type,
-      resumable: false,
-      metadata: {
-        cacheControl: "private, max-age=0, no-store",
-      },
+    await writeAuditEntry({
+      action: "document.uploaded",
+      firebase_uid: req.params.uid,
+      document_id: docRef.id,
+      doc_type: payload.doc_type,
+      actor: "user",
     });
 
-    const document = await createUserDocumentRecord(
-      req.params.uid,
-      {
-        onboarding_request_id: payload.onboarding_request_id || null,
-        doc_type: payload.doc_type,
-        file_name: payload.file_name,
-        storage_path: storagePath,
-        content_type: payload.content_type,
-      },
-      "system",
-    );
-
-    res.status(201).json({
-      document,
-      upload: {
-        storage_path: storagePath,
-      },
-    });
+    res.status(201).json({ document: { id: created.id, ...created.data() } });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
@@ -2849,9 +2670,7 @@ app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res
-        .status(403)
-        .json({ error: "Only admins can review documents." });
+      return res.status(403).json({ error: "Only admins can review documents." });
     }
 
     const ref = userDocumentsCollection().doc(req.params.docId);
@@ -2860,16 +2679,12 @@ app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
       return res.status(404).json({ error: "Document not found." });
     }
     if (doc.data().firebase_uid !== req.params.uid) {
-      return res
-        .status(404)
-        .json({ error: "Document does not belong to this user." });
+      return res.status(404).json({ error: "Document does not belong to this user." });
     }
 
     const status = req.body?.status;
     if (!["approved", "rejected", "pending"].includes(status)) {
-      return res
-        .status(400)
-        .json({ error: "status must be approved, rejected, or pending." });
+      return res.status(400).json({ error: "status must be approved, rejected, or pending." });
     }
 
     await ref.set(
@@ -2891,47 +2706,6 @@ app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
 
     const updated = await ref.get();
     res.json({ document: { id: updated.id, ...updated.data() } });
-  } catch (error) {
-    res.status(500).json({ error: String(error) });
-  }
-});
-
-app.get("/api/v1/users/:uid/documents/:docId/download", async (req, res) => {
-  try {
-    const ref = userDocumentsCollection().doc(req.params.docId);
-    const doc = await ref.get();
-    if (!doc.exists) {
-      return res.status(404).json({ error: "Document not found." });
-    }
-    if (doc.data().firebase_uid !== req.params.uid) {
-      return res
-        .status(404)
-        .json({ error: "Document does not belong to this user." });
-    }
-
-    const storagePath = doc.data().storage_path;
-    if (!storagePath) {
-      return res
-        .status(404)
-        .json({ error: "No file stored for this document." });
-    }
-
-    const file = storageBucket.file(storagePath);
-    const [exists] = await file.exists();
-    if (!exists) {
-      return res.status(404).json({ error: "File not found in storage." });
-    }
-
-    const [signedUrl] = await file.getSignedUrl({
-      action: "read",
-      expires: Date.now() + 15 * 60 * 1000,
-    });
-
-    res.json({
-      url: signedUrl,
-      file_name: doc.data().file_name,
-      content_type: doc.data().content_type,
-    });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

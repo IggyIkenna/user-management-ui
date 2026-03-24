@@ -23,7 +23,9 @@
     "test:watch": "vitest",
     "test:integration": "vitest run tests/integration",
     "quality:gates": "bash scripts/quality-gates.sh",
-    "quality:gates:ci": "bash scripts/quality-gates.sh --ci"
+    "quality:gates:ci": "bash scripts/quality-gates.sh --ci",
+    "deploy:firebase:hosting": "firebase deploy --only hosting",
+    "deploy:firebase:apphosting": "firebase deploy --only apphosting:user-management-ui"
   },
   "dependencies": {
     "@aws-sdk/client-iam": "^3.1011.0",
