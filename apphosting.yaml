@@ -1,7 +1,6 @@
 # Firebase App Hosting — Next.js runtime (see docs/FIREBASE_DEPLOYMENT.md).
-# Backend id must match firebase.json → apphosting[].backendId (odum-user-mgmt-admin).
 # USER_MGMT_API_URL is the HTTPS base for the Express API in server/ (usually Cloud Run).
-# Firebase Hosting uses site odum-user-management (not the project default site).
+# Firebase Hosting (firebase.json → hosting) deploys public/ separately as static assets.
 runConfig:
   memoryMiB: 1024
 
