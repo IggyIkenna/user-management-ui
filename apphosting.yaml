@@ -1,6 +1,19 @@
 # App Hosting runtime overrides for Next.js + Express sidecar API.
+runConfig:
+  memoryMiB: 1024
+
 scripts:
   runCommand: sh -c "node server/index.js & npx next start -p ${PORT:-8080}"
+
+outputFiles:
+  serverApp:
+    include:
+      - .next
+      - public
+      - server
+      - package.json
+      - package-lock.json
+      - next.config.mjs
 
 env:
   - variable: USER_MGMT_API_URL
