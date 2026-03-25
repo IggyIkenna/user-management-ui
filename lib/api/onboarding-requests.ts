@@ -46,10 +46,21 @@ export async function getOnboardingRequest(id: string) {
   );
 }
 
-export async function approveRequest(id: string, note?: string, role?: string) {
-  return apiClient.post<{ request: OnboardingRequest; user_status: string }>(
+export interface AppGrant {
+  app_id: string;
+  role: string;
+  environments?: string[];
+}
+
+export async function approveRequest(
+  id: string,
+  note?: string,
+  role?: string,
+  appGrants?: AppGrant[],
+) {
+  return apiClient.post<{ request: OnboardingRequest; user_status: string; granted_apps: string[] }>(
     `/onboarding-requests/${id}/approve`,
-    { note, role },
+    { note, role, app_grants: appGrants },
   );
 }
 
