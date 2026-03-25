@@ -18,6 +18,8 @@ import {
   Server,
   Globe,
   Lock,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +59,7 @@ import {
 import {
   listUserDocuments,
   reviewDocument,
+  getDocumentDownloadUrl,
   type UserDocument,
 } from "@/lib/api/onboarding-requests";
 import { changePassword } from "@/lib/api/settings";
@@ -139,6 +142,8 @@ export default function UserDetailPage() {
   const [error, setError] = React.useState("");
   const [reprovisioning, setReprovisioning] = React.useState(false);
 
+  const [downloadingDocId, setDownloadingDocId] = React.useState<string | null>(null);
+
   const [adminNewPassword, setAdminNewPassword] = React.useState("");
   const [adminConfirmPassword, setAdminConfirmPassword] = React.useState("");
   const [adminPasswordSaving, setAdminPasswordSaving] = React.useState(false);
@@ -202,6 +207,18 @@ export default function UserDetailPage() {
       setReprovisioning(false);
     }
   };
+
+  async function handleDocDownload(docId: string) {
+    setDownloadingDocId(docId);
+    try {
+      const res = await getDocumentDownloadUrl(userId, docId);
+      window.open(res.data.url, "_blank");
+    } catch {
+      setError("Failed to get download link.");
+    } finally {
+      setDownloadingDocId(null);
+    }
+  }
 
   const showAdminPasswordCard =
     isAdmin() &&
@@ -629,6 +646,17 @@ export default function UserDetailPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          title="Download"
+                          disabled={downloadingDocId === doc.id}
+                          onClick={() => handleDocDownload(doc.id)}
+                        >
+                          {downloadingDocId === doc.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5 mr-1" />}
+                          View
+                        </Button>
                         {doc.review_status !== "approved" && (
                           <Button
                             variant="ghost"

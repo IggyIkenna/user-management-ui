@@ -88,3 +88,9 @@ export async function reviewDocument(
     { status, note },
   );
 }
+
+export async function getDocumentDownloadUrl(uid: string, docId: string) {
+  return apiClient.get<{ url: string; file_name: string; content_type: string }>(
+    `/users/${uid}/documents/${docId}/download`,
+  );
+}
