@@ -1,11 +1,20 @@
 # Firebase deployment — user-management-ui
 
-This repo uses **two Firebase surfaces** on the same GCP/Firebase project:
+This repo uses **two Firebase surfaces** on the same GCP/Firebase project (`central-element-323112`). They use **dedicated resource names** so they do not collide with other apps (for example `unified-trading-system-ui`) on the default Hosting site.
 
-| Surface | Role | What gets deployed |
-|--------|------|----------------------|
-| **Firebase App Hosting** | **Application backend (runtime)** | The **Next.js** app (`next build` / `next start`). Handles SSR, routing, and **rewrites** of `/api/*` and `/health` to the HTTP API (see `next.config.mjs`). |
-| **Firebase Hosting** | **Static frontend assets** | Contents of **`public/`** (favicon, robots, static files). Does **not** replace the Next.js UI; it is an additional static site or the default Hosting site used for static files. |
+| Surface | Id in Firebase | Role | What gets deployed |
+|--------|----------------|------|---------------------|
+| **Firebase App Hosting** | Backend **`odum-user-mgmt-admin`** | Next.js runtime | The **Next.js** app (`next build` / `next start`). SSR, routing, **rewrites** of `/api/*` and `/health` → Express API (`next.config.mjs`). |
+| **Firebase Hosting** | Site **`odum-user-management`** | Static assets | Contents of **`public/`** (favicon, robots, etc.). Separate from the project default site and from other products’ Hosting deploys. |
+
+### One-time Firebase Console setup
+
+Before the first deploy with this layout:
+
+1. **Hosting → Add another site** → create site id **`odum-user-management`** (or run `firebase hosting:sites:create odum-user-management --project central-element-323112`).
+2. **App Hosting** → add a backend with id **`odum-user-mgmt-admin`** linked to this repo, **or** run `npm run deploy:firebase:apphosting` and complete any console prompts so the backend id matches `firebase.json`.
+
+The legacy backend **`user-management-ui`** and default site **`central-element-323112`** can be retired in the console once traffic moves to the new URLs.
 
 The **Express** server in **`server/index.js`** is the **user-management API** (Firestore, Auth, workflows, `/api/v1/*`). It is **not** executed inside the Next.js App Hosting container unless you merge it into a single Node process. In production, that API is expected to run as **Cloud Run** (or another HTTPS URL). **App Hosting** sets `USER_MGMT_API_URL` (see `apphosting.yaml`) so Next.js rewrites point at that API.
 
@@ -43,11 +52,15 @@ Deploy both when you change static files and the Next app:
 npm run deploy:firebase:hosting && npm run deploy:firebase:apphosting
 ```
 
-Exact Hosting **site** id is in `firebase.json` → `hosting.site`. Create extra sites in Firebase Console if you need a dedicated static domain separate from the App Hosting URL.
+Hosting **site** id is **`odum-user-management`** (`firebase.json` → `hosting.site`). After `npm run deploy:firebase:hosting`, **https://odum-user-management.web.app** serves `public/` (a small static bundle; `index.html` redirects to App Hosting).
+
+**Full admin UI (Next.js):** **https://odum-user-mgmt-admin--central-element-323112.us-central1.hosted.app** — deploy with `npm run deploy:firebase:apphosting`. If the CLI says the backend does not exist, create it once (non-interactive):
+
+`npx firebase-tools apphosting:backends:create -P central-element-323112 --backend odum-user-mgmt-admin --primary-region us-central1 --root-dir . --non-interactive`
 
 ## Secrets
 
-- **App Hosting**: map secrets in Firebase Console (App Hosting → backend → environment) to match `apphosting.yaml` (`FIREBASE_API_KEY`, `github-automation-token`, etc.).
+- **App Hosting**: map secrets in Firebase Console (App Hosting → backend **`odum-user-mgmt-admin`** → environment) to match `apphosting.yaml` (`FIREBASE_API_KEY`, `github-automation-token`, etc.). If you previously used backend **`user-management-ui`**, copy the same variables/secrets onto the new backend.
 - **Express on Cloud Run**: use Secret Manager or Cloud Run env as required by `server/secret-manager.js`.
 
 ## Not covered here
