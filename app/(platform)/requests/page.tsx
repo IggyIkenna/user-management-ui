@@ -61,6 +61,7 @@ export default function OnboardingRequestsPage() {
   const [selectedApps, setSelectedApps] = React.useState<
     Record<string, { selected: boolean; role: string }>
   >({});
+  const [actionError, setActionError] = React.useState<string | null>(null);
 
   const fetchRequests = React.useCallback(async () => {
     setLoading(true);
@@ -102,9 +103,39 @@ export default function OnboardingRequestsPage() {
     }));
   };
 
+  const allAppsSelected = apps.length > 0 && apps.every((a) => selectedApps[a.app_id]?.selected);
+
+  const toggleSelectAll = () => {
+    if (allAppsSelected) {
+      setSelectedApps({});
+    } else {
+      const all: Record<string, { selected: boolean; role: string }> = {};
+      for (const app of apps) {
+        all[app.app_id] = {
+          selected: true,
+          role: selectedApps[app.app_id]?.role || actionRole || "viewer",
+        };
+      }
+      setSelectedApps(all);
+    }
+  };
+
+  const setAllAppsRole = (role: string) => {
+    setSelectedApps((prev) => {
+      const updated = { ...prev };
+      for (const app of apps) {
+        if (updated[app.app_id]?.selected) {
+          updated[app.app_id] = { ...updated[app.app_id], role };
+        }
+      }
+      return updated;
+    });
+  };
+
   async function handleAction() {
     if (!actionDialog) return;
     setActionInProgress(true);
+    setActionError(null);
     try {
       if (actionDialog.type === "approve") {
         const appGrants: AppGrant[] = Object.entries(selectedApps)
@@ -120,10 +151,11 @@ export default function OnboardingRequestsPage() {
       }
       setActionDialog(null);
       setActionNote("");
+      setActionError(null);
       setSelectedApps({});
       fetchRequests();
-    } catch {
-      /* error handling */
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Action failed. Please try again.");
     } finally {
       setActionInProgress(false);
     }
@@ -282,7 +314,32 @@ export default function OnboardingRequestsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Grant Application Access</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Grant Application Access</Label>
+                  <div className="flex items-center gap-2">
+                    {Object.values(selectedApps).some((v) => v.selected) && (
+                      <Select onValueChange={setAllAppsRole}>
+                        <SelectTrigger className="w-28 h-7 text-xs">
+                          <SelectValue placeholder="Set all roles" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="viewer">All Viewer</SelectItem>
+                          <SelectItem value="editor">All Editor</SelectItem>
+                          <SelectItem value="admin">All Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={toggleSelectAll}
+                    >
+                      {allAppsSelected ? "Deselect All" : "Select All"}
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-2">
                   {apps.map((app) => (
                     <div key={app.app_id} className="flex items-center gap-3 py-1">
@@ -324,8 +381,13 @@ export default function OnboardingRequestsPage() {
               rows={3}
             />
           </div>
+          {actionError && (
+            <div className="rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {actionError}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setActionDialog(null)}>
+            <Button variant="outline" onClick={() => { setActionDialog(null); setActionError(null); }}>
               Cancel
             </Button>
             <Button
