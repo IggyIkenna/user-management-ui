@@ -31,6 +31,7 @@ import {
   ChevronDown,
   GitBranch,
   Inbox,
+  Bell,
 } from "lucide-react";
 
 interface NavSection {
@@ -75,6 +76,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: LayoutDashboard,
     items: [
       { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+      { label: "Notifications", href: "/notifications", icon: Bell },
       { label: "Settings", href: "/settings", icon: Settings },
     ],
   },

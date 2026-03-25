@@ -113,6 +113,10 @@ function userDocumentsCollection() {
   return firestore.collection("user_documents");
 }
 
+function notificationPreferencesCollection() {
+  return firestore.collection("notification_preferences");
+}
+
 function sanitizeFileName(fileName) {
   return String(fileName || "document.bin").replace(/[^a-zA-Z0-9._-]/g, "_");
 }
@@ -188,9 +192,7 @@ async function notifyAdminsForEvent(eventType, { subject, html }) {
       .where("event_type", "==", eventType)
       .where("enabled", "==", true)
       .get();
-    const emails = snap.docs
-      .map((d) => d.data().recipient_email)
-      .filter(Boolean);
+    const emails = snap.docs.map((d) => d.data().recipient_email).filter(Boolean);
     if (emails.length > 0) {
       await sendEmail({ to: emails, subject, html });
     }
@@ -2186,9 +2188,7 @@ app.get("/api/v1/authorize", async (req, res) => {
     }
 
     const profileSnap = await usersCollection().doc(uid).get();
-    const userStatus = profileSnap.exists
-      ? profileSnap.data()?.status || "unknown"
-      : "unknown";
+    const userStatus = profileSnap.exists ? profileSnap.data()?.status || "unknown" : "unknown";
 
     if (!bestRole) {
       return res.json({
@@ -2461,6 +2461,20 @@ app.post("/api/v1/signup", async (req, res) => {
       actor: "self",
     });
 
+    try {
+      await sendEmail({
+        to: payload.email,
+        subject: "Application received — under review",
+        html: `<p>Hi ${payload.name},</p><p>Thank you for your application. Our team is reviewing your submission and you will receive an email once a decision has been made.</p><p>Your application reference: <strong>${reqRef.id}</strong></p>`,
+      });
+      await notifyAdminsForEvent("signup_submitted", {
+        subject: `New signup requires review: ${payload.email}`,
+        html: `<p>A new account application has been submitted:</p><ul><li><strong>Name:</strong> ${payload.name}</li><li><strong>Email:</strong> ${payload.email}</li><li><strong>Company:</strong> ${payload.company || "N/A"}</li><li><strong>Service:</strong> ${payload.service_type || "general"}</li></ul><p>Please review in the admin dashboard.</p>`,
+      });
+    } catch {
+      /* email is best-effort */
+    }
+
     res.status(201).json({
       user: { ...profile, firebase_uid: firebaseUser.uid },
       onboarding_request_id: reqRef.id,
@@ -2534,6 +2548,7 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
     const now = new Date().toISOString();
     const note = req.body?.note || "";
     const role = req.body?.role || "client";
+    const appGrants = Array.isArray(req.body?.app_grants) ? req.body.app_grants : [];
 
     await auth.updateUser(request.firebase_uid, { disabled: false });
     await auth.setCustomUserClaims(request.firebase_uid, { role, source: "admin-approved" });
@@ -2559,18 +2574,64 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
       { merge: true },
     );
 
+    const grantedApps = [];
+    for (const grant of appGrants) {
+      if (!grant.app_id) continue;
+      const existing = await appEntitlementsCollection()
+        .where("app_id", "==", grant.app_id)
+        .where("subject_type", "==", "user")
+        .where("subject_id", "==", request.firebase_uid)
+        .limit(1)
+        .get();
+      if (!existing.empty) {
+        await existing.docs[0].ref.set(
+          { role: grant.role || "viewer", environments: grant.environments || ["prod"], updated_at: now },
+          { merge: true },
+        );
+      } else {
+        await appEntitlementsCollection().add({
+          app_id: grant.app_id,
+          subject_type: "user",
+          subject_id: request.firebase_uid,
+          subject_label: request.applicant_name || request.applicant_email,
+          role: grant.role || "viewer",
+          environments: grant.environments || ["prod"],
+          granted_by: actor.uid,
+          created_at: now,
+          updated_at: now,
+        });
+      }
+      grantedApps.push(grant.app_id);
+    }
+
     await writeAuditEntry({
       action: "signup.approved",
       firebase_uid: request.firebase_uid,
       onboarding_request_id: req.params.id,
       reviewer_uid: actor.uid,
       note,
+      granted_apps: grantedApps,
       actor: actor.uid,
     });
+
+    try {
+      await sendEmail({
+        to: request.applicant_email,
+        subject: "Your account has been approved",
+        html: `<h2>Welcome!</h2><p>Hi ${request.applicant_name || "there"},</p><p>Your account has been approved and is now active. You can log in using the email and password you registered with.</p>${note ? `<p><strong>Reviewer note:</strong> ${note}</p>` : ""}<p>Thank you for joining us.</p>`,
+      });
+      await notifyAdminsForEvent("signup_approved", {
+        subject: `Account approved: ${request.applicant_email}`,
+        html: `<p><strong>${request.applicant_name}</strong> (${request.applicant_email}) has been approved by admin.</p>${grantedApps.length > 0 ? `<p>Granted apps: ${grantedApps.join(", ")}</p>` : ""}`,
+      });
+    } catch {
+      /* email is best-effort */
+    }
 
     res.json({
       request: { id: doc.id, ...(await ref.get()).data() },
       user_status: "active",
+      granted_apps: grantedApps,
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2634,6 +2695,20 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
       deleted: deleteUser,
       actor: actor.uid,
     });
+
+    try {
+      await sendEmail({
+        to: request.applicant_email,
+        subject: "Update on your application",
+        html: `<p>Hi ${request.applicant_name || "there"},</p><p>We have reviewed your application and unfortunately we are unable to proceed at this time.</p>${note ? `<p><strong>Note:</strong> ${note}</p>` : ""}<p>If you have questions, please contact our support team.</p>`,
+      });
+      await notifyAdminsForEvent("signup_rejected", {
+        subject: `Application rejected: ${request.applicant_email}`,
+        html: `<p><strong>${request.applicant_name}</strong> (${request.applicant_email}) application was rejected.</p>${note ? `<p>Note: ${note}</p>` : ""}`,
+      });
+    } catch {
+      /* email is best-effort */
+    }
 
     res.json({ request: { id: doc.id, ...(await ref.get()).data() } });
   } catch (error) {
@@ -3108,9 +3183,7 @@ app.post("/api/v1/apps/register", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res
-        .status(403)
-        .json({ error: "Only admins can register applications." });
+      return res.status(403).json({ error: "Only admins can register applications." });
     }
 
     const payload = req.body || {};
@@ -3131,31 +3204,18 @@ app.post("/api/v1/apps/register", async (req, res) => {
       created_at: now,
       updated_at: now,
     };
-    await applicationsCollection()
-      .doc(payload.app_id)
-      .set(appDoc, { merge: true });
+    await applicationsCollection().doc(payload.app_id).set(appDoc, { merge: true });
 
     if (Array.isArray(payload.capabilities)) {
-      await appCapabilitiesCollection()
-        .doc(payload.app_id)
-        .set({
-          app_id: payload.app_id,
-          capabilities: payload.capabilities,
-          role_presets: payload.role_presets || {
-            viewer: [],
-            editor: [],
-            admin: ["*"],
-            owner: ["*"],
-          },
-          updated_at: now,
-        });
+      await appCapabilitiesCollection().doc(payload.app_id).set({
+        app_id: payload.app_id,
+        capabilities: payload.capabilities,
+        role_presets: payload.role_presets || { viewer: [], editor: [], admin: ["*"], owner: ["*"] },
+        updated_at: now,
+      });
     }
 
-    await writeAuditEntry({
-      action: "app.registered",
-      app_id: payload.app_id,
-      actor: actor.uid,
-    });
+    await writeAuditEntry({ action: "app.registered", app_id: payload.app_id, actor: actor.uid });
     res.status(201).json({ application: appDoc });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -3172,9 +3232,7 @@ app.get("/api/v1/notification-preferences", async (req, res) => {
     if (!actor || !(await isPlatformAdmin(actor.uid))) {
       return res.status(403).json({ error: "Admin access required." });
     }
-    const snapshot = await notificationPreferencesCollection()
-      .orderBy("created_at", "desc")
-      .get();
+    const snapshot = await notificationPreferencesCollection().orderBy("created_at", "desc").get();
     const prefs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     res.json({ preferences: prefs, total: prefs.length });
   } catch (error) {
@@ -3190,9 +3248,7 @@ app.post("/api/v1/notification-preferences", async (req, res) => {
     }
     const payload = req.body || {};
     if (!payload.event_type || !payload.recipient_email) {
-      return res
-        .status(400)
-        .json({ error: "event_type and recipient_email are required." });
+      return res.status(400).json({ error: "event_type and recipient_email are required." });
     }
     const now = new Date().toISOString();
     const docRef = await notificationPreferencesCollection().add({
@@ -3225,10 +3281,8 @@ app.put("/api/v1/notification-preferences/:id", async (req, res) => {
     const updates = {};
     if (req.body?.enabled !== undefined) updates.enabled = req.body.enabled;
     if (req.body?.event_type) updates.event_type = req.body.event_type;
-    if (req.body?.recipient_email)
-      updates.recipient_email = req.body.recipient_email;
-    if (req.body?.recipient_name !== undefined)
-      updates.recipient_name = req.body.recipient_name;
+    if (req.body?.recipient_email) updates.recipient_email = req.body.recipient_email;
+    if (req.body?.recipient_name !== undefined) updates.recipient_name = req.body.recipient_name;
     updates.updated_at = new Date().toISOString();
     await ref.set(updates, { merge: true });
     const updated = await ref.get();
