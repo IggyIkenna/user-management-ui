@@ -41,11 +41,11 @@ export default function LoginPage() {
     setIsLoading(true);
     setError("");
 
-    const success = await login(email, password);
-    if (success) {
+    const result = await login(email, password);
+    if (result.success) {
       router.push(redirectTo || "/users");
     } else {
-      setError("Invalid credentials. Please check your email and password.");
+      setError(result.error || "Invalid credentials. Please check your email and password.");
     }
     setIsLoading(false);
   };
@@ -85,6 +85,7 @@ export default function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10"
+                      autoComplete="email"
                       required
                     />
                   </div>
@@ -100,6 +101,7 @@ export default function LoginPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10"
+                      autoComplete="current-password"
                       required
                     />
                   </div>
