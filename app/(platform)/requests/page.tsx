@@ -30,14 +30,33 @@ import {
 } from "@/components/ui/select";
 import {
   listOnboardingRequests,
+  getOnboardingRequest,
   approveRequest,
   rejectRequest,
+  listUserDocuments,
   type OnboardingRequest,
+  type UserDocument,
   type AppGrant,
 } from "@/lib/api/onboarding-requests";
 import { listApplications } from "@/lib/api/applications";
 import type { Application } from "@/lib/api/types";
-import { CheckCircle2, XCircle, Clock, Eye, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Eye,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Building2,
+  Phone,
+  Mail,
+  User,
+  Briefcase,
+  DollarSign,
+  Calendar,
+} from "lucide-react";
 import Link from "next/link";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: typeof Clock }> = {
@@ -46,10 +65,152 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   rejected: { label: "Rejected", variant: "destructive", icon: XCircle },
 };
 
+function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
+  const [documents, setDocuments] = React.useState<UserDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoadingDocs(true);
+      try {
+        const detailRes = await getOnboardingRequest(request.id);
+        if (!cancelled) {
+          setDocuments(detailRes.data.documents || []);
+        }
+      } catch {
+        if (!cancelled) {
+          try {
+            const docsRes = await listUserDocuments(request.firebase_uid);
+            if (!cancelled) setDocuments(docsRes.data.documents || []);
+          } catch {
+            if (!cancelled) setDocuments([]);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoadingDocs(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [request.id, request.firebase_uid]);
+
+  return (
+    <div className="mt-3 border-t pt-4 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold text-foreground">Applicant Details</h4>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <User className="size-3.5 shrink-0" />
+              <span className="font-medium text-foreground">{request.applicant_name}</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Mail className="size-3.5 shrink-0" />
+              <span>{request.applicant_email}</span>
+            </div>
+            {request.company && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Building2 className="size-3.5 shrink-0" />
+                <span>{request.company}</span>
+              </div>
+            )}
+            {request.phone && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Phone className="size-3.5 shrink-0" />
+                <span>{request.phone}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold text-foreground">Service Request</h4>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Briefcase className="size-3.5 shrink-0" />
+              <span>Type: <span className="font-medium text-foreground">{request.service_type || "General"}</span></span>
+            </div>
+            {"expected_aum" in request && request.expected_aum ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <DollarSign className="size-3.5 shrink-0" />
+                <span>Expected AUM: <span className="font-medium text-foreground">{String(request.expected_aum)}</span></span>
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Calendar className="size-3.5 shrink-0" />
+              <span>Submitted: {new Date(request.created_at).toLocaleString()}</span>
+            </div>
+            {request.selected_options.length > 0 && (
+              <div className="flex items-start gap-2 text-muted-foreground">
+                <CheckCircle2 className="size-3.5 shrink-0 mt-0.5" />
+                <div className="flex flex-wrap gap-1">
+                  {request.selected_options.map((o) => (
+                    <Badge key={o} variant="secondary" className="text-xs">
+                      {o}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <FileText className="size-3.5" />
+          Uploaded Documents
+        </h4>
+        {loadingDocs ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+            <Loader2 className="size-3.5 animate-spin" />
+            Loading documents...
+          </div>
+        ) : documents.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-1">No documents uploaded.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="size-3.5 text-muted-foreground" />
+                  <span className="font-medium">{doc.file_name}</span>
+                  <Badge variant="outline" className="text-[10px]">{doc.doc_type}</Badge>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <Badge
+                    variant={doc.review_status === "approved" ? "default" : doc.review_status === "rejected" ? "destructive" : "outline"}
+                    className="text-[10px]"
+                  >
+                    {doc.review_status}
+                  </Badge>
+                  <span>{new Date(doc.uploaded_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {request.review_note && (
+        <div className="space-y-1">
+          <h4 className="text-sm font-semibold text-foreground">Review Note</h4>
+          <p className="text-sm text-muted-foreground">{request.review_note}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OnboardingRequestsPage() {
   const [requests, setRequests] = React.useState<OnboardingRequest[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [actionDialog, setActionDialog] = React.useState<{
     type: "approve" | "reject";
     request: OnboardingRequest;
@@ -207,17 +368,24 @@ export default function OnboardingRequestsPage() {
           {requests.map((req) => {
             const config = STATUS_CONFIG[req.status] || STATUS_CONFIG.pending;
             const StatusIcon = config.icon;
+            const isExpanded = expandedId === req.id;
             return (
               <Card key={req.id}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => setExpandedId(isExpanded ? null : req.id)}
+                    >
                       <CardTitle className="text-base flex items-center gap-2">
                         {req.applicant_name}
                         <Badge variant={config.variant} className="text-xs">
                           <StatusIcon className="size-3 mr-1" />
                           {config.label}
                         </Badge>
+                        {isExpanded
+                          ? <ChevronUp className="size-4 text-muted-foreground" />
+                          : <ChevronDown className="size-4 text-muted-foreground" />}
                       </CardTitle>
                       <CardDescription className="text-xs mt-1">
                         {req.applicant_email}
@@ -235,6 +403,7 @@ export default function OnboardingRequestsPage() {
                               setActionDialog({ type: "approve", request: req });
                               setActionNote("");
                               setActionRole("client");
+                              setActionError(null);
                             }}
                           >
                             <CheckCircle2 className="size-3.5 mr-1" />
@@ -246,6 +415,7 @@ export default function OnboardingRequestsPage() {
                             onClick={() => {
                               setActionDialog({ type: "reject", request: req });
                               setActionNote("");
+                              setActionError(null);
                             }}
                           >
                             <XCircle className="size-3.5 mr-1" />
@@ -275,10 +445,8 @@ export default function OnboardingRequestsPage() {
                         ))}
                       </span>
                     )}
-                    {req.review_note && (
-                      <span>Note: {req.review_note}</span>
-                    )}
                   </div>
+                  {isExpanded && <RequestDetailPanel request={req} />}
                 </CardContent>
               </Card>
             );
@@ -286,8 +454,8 @@ export default function OnboardingRequestsPage() {
         </div>
       )}
 
-      <Dialog open={!!actionDialog} onOpenChange={() => setActionDialog(null)}>
-        <DialogContent>
+      <Dialog open={!!actionDialog} onOpenChange={() => { setActionDialog(null); setActionError(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {actionDialog?.type === "approve" ? "Approve" : "Reject"} Request
@@ -298,6 +466,37 @@ export default function OnboardingRequestsPage() {
                 : `Reject ${actionDialog?.request.applicant_name}'s signup.`}
             </DialogDescription>
           </DialogHeader>
+
+          {actionDialog && (
+            <div className="rounded border bg-muted/30 p-3 space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <User className="size-3.5 text-muted-foreground" />
+                <span className="font-medium">{actionDialog.request.applicant_name}</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Mail className="size-3.5" />
+                <span>{actionDialog.request.applicant_email}</span>
+              </div>
+              {actionDialog.request.company && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Building2 className="size-3.5" />
+                  <span>{actionDialog.request.company}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Briefcase className="size-3.5" />
+                <span>{actionDialog.request.service_type || "General"}</span>
+              </div>
+              {actionDialog.request.selected_options.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {actionDialog.request.selected_options.map((o) => (
+                    <Badge key={o} variant="secondary" className="text-xs">{o}</Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {actionDialog?.type === "approve" && (
             <>
               <div className="space-y-2">
