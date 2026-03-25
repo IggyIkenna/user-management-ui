@@ -32,6 +32,8 @@ import { loadProviderSecrets, resolveFirebaseApiKey } from "./secret-manager.js"
 const PORT = Number(process.env.PORT || 8017);
 const FIREBASE_PROJECT_ID =
   process.env.GOOGLE_CLOUD_PROJECT_ID || "central-element-323112";
+const FIREBASE_STORAGE_BUCKET =
+  process.env.FIREBASE_STORAGE_BUCKET || `${FIREBASE_PROJECT_ID}.appspot.com`;
 const GCP_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
 
 const WORKFLOW_NAMES = {
@@ -45,18 +47,20 @@ const WORKFLOW_NAMES = {
 if (!admin.apps.length) {
   admin.initializeApp({
     projectId: FIREBASE_PROJECT_ID,
+    storageBucket: FIREBASE_STORAGE_BUCKET,
   });
 }
 
 const auth = admin.auth();
 const firestore = admin.firestore();
+const storageBucket = admin.storage().bucket();
 const googleAuth = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/cloud-platform"],
 });
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "25mb" }));
 
 function usersCollection() {
   return firestore.collection("user_profiles");
@@ -104,6 +108,37 @@ function onboardingRequestsCollection() {
 
 function userDocumentsCollection() {
   return firestore.collection("user_documents");
+}
+
+function sanitizeFileName(fileName) {
+  return String(fileName || "document.bin").replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+async function createUserDocumentRecord(uid, payload, actor = "user") {
+  const now = new Date().toISOString();
+  const docRef = await userDocumentsCollection().add({
+    firebase_uid: uid,
+    onboarding_request_id: payload.onboarding_request_id || null,
+    doc_type: payload.doc_type,
+    file_name: payload.file_name,
+    storage_path: payload.storage_path,
+    content_type: payload.content_type || "application/octet-stream",
+    review_status: "pending",
+    review_note: "",
+    uploaded_at: now,
+    updated_at: now,
+  });
+  const created = await docRef.get();
+
+  await writeAuditEntry({
+    action: "document.uploaded",
+    firebase_uid: uid,
+    document_id: docRef.id,
+    doc_type: payload.doc_type,
+    actor,
+  });
+
+  return { id: created.id, ...created.data() };
 }
 
 function githubReposCollection() {
@@ -2404,31 +2439,59 @@ app.post("/api/v1/users/:uid/documents", async (req, res) => {
     if (!payload.doc_type || !payload.file_name || !payload.storage_path) {
       return res.status(400).json({ error: "doc_type, file_name, and storage_path are required." });
     }
+    const document = await createUserDocumentRecord(req.params.uid, payload, "user");
+    res.status(201).json({ document });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
 
-    const now = new Date().toISOString();
-    const docRef = await userDocumentsCollection().add({
-      firebase_uid: req.params.uid,
-      onboarding_request_id: payload.onboarding_request_id || null,
-      doc_type: payload.doc_type,
-      file_name: payload.file_name,
-      storage_path: payload.storage_path,
-      content_type: payload.content_type || "application/octet-stream",
-      review_status: "pending",
-      review_note: "",
-      uploaded_at: now,
-      updated_at: now,
+app.post("/api/v1/users/:uid/documents/upload", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (
+      !payload.doc_type ||
+      !payload.file_name ||
+      !payload.content_type ||
+      !payload.file_base64
+    ) {
+      return res.status(400).json({
+        error:
+          "doc_type, file_name, content_type, and file_base64 are required.",
+      });
+    }
+
+    const safeFileName = sanitizeFileName(payload.file_name);
+    const storagePath = `onboarding-docs/${req.params.uid}/${payload.onboarding_request_id || "draft"}/${Date.now()}-${payload.doc_type}-${safeFileName}`;
+    const storageFile = storageBucket.file(storagePath);
+    const fileBuffer = Buffer.from(String(payload.file_base64), "base64");
+
+    await storageFile.save(fileBuffer, {
+      contentType: payload.content_type,
+      resumable: false,
+      metadata: {
+        cacheControl: "private, max-age=0, no-store",
+      },
     });
-    const created = await docRef.get();
 
-    await writeAuditEntry({
-      action: "document.uploaded",
-      firebase_uid: req.params.uid,
-      document_id: docRef.id,
-      doc_type: payload.doc_type,
-      actor: "user",
+    const document = await createUserDocumentRecord(
+      req.params.uid,
+      {
+        onboarding_request_id: payload.onboarding_request_id || null,
+        doc_type: payload.doc_type,
+        file_name: payload.file_name,
+        storage_path: storagePath,
+        content_type: payload.content_type,
+      },
+      "system",
+    );
+
+    res.status(201).json({
+      document,
+      upload: {
+        storage_path: storagePath,
+      },
     });
-
-    res.status(201).json({ document: { id: created.id, ...created.data() } });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
