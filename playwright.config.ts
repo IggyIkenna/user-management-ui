@@ -30,6 +30,9 @@ export default defineConfig({
       url: "http://localhost:5184",
       reuseExistingServer: true,
       timeout: 120 * 1000,
+      env: {
+        NEXT_PUBLIC_SKIP_AUTH: "true",
+      },
     },
   ],
 });

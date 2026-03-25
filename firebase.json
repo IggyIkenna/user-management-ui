@@ -1,7 +1,7 @@
 {
   "apphosting": [
     {
-      "backendId": "user-management-ui",
+      "backendId": "odum-user-mgmt-admin",
       "rootDir": ".",
       "ignore": [
         "node_modules",
@@ -15,7 +15,7 @@
     }
   ],
   "hosting": {
-    "site": "central-element-323112",
+    "site": "odum-user-management",
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   }
