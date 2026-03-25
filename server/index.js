@@ -2724,9 +2724,10 @@ app.get("/api/v1/users/:uid/documents", async (req, res) => {
   try {
     const snapshot = await userDocumentsCollection()
       .where("firebase_uid", "==", req.params.uid)
-      .orderBy("uploaded_at", "desc")
       .get();
-    const documents = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const documents = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || ""));
     res.json({ documents, total: documents.length });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2840,6 +2841,43 @@ app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
 
     const updated = await ref.get();
     res.json({ document: { id: updated.id, ...updated.data() } });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/users/:uid/documents/:docId/download", async (req, res) => {
+  try {
+    const ref = userDocumentsCollection().doc(req.params.docId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Document not found." });
+    }
+    if (doc.data().firebase_uid !== req.params.uid) {
+      return res.status(404).json({ error: "Document does not belong to this user." });
+    }
+
+    const storagePath = doc.data().storage_path;
+    if (!storagePath) {
+      return res.status(404).json({ error: "No file stored for this document." });
+    }
+
+    const file = storageBucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      return res.status(404).json({ error: "File not found in storage." });
+    }
+
+    const [signedUrl] = await file.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 15 * 60 * 1000,
+    });
+
+    res.json({
+      url: signedUrl,
+      file_name: doc.data().file_name,
+      content_type: doc.data().content_type,
+    });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

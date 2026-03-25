@@ -34,6 +34,8 @@ import {
   approveRequest,
   rejectRequest,
   listUserDocuments,
+  reviewDocument,
+  getDocumentDownloadUrl,
   type OnboardingRequest,
   type UserDocument,
   type AppGrant,
@@ -56,6 +58,9 @@ import {
   Briefcase,
   DollarSign,
   Calendar,
+  Download,
+  Check,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -68,32 +73,53 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
   const [documents, setDocuments] = React.useState<UserDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = React.useState(true);
+  const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
+  const [reviewingId, setReviewingId] = React.useState<string | null>(null);
+
+  const loadDocuments = React.useCallback(async () => {
+    setLoadingDocs(true);
+    try {
+      const detailRes = await getOnboardingRequest(request.id);
+      setDocuments(detailRes.data.documents || []);
+    } catch {
+      try {
+        const docsRes = await listUserDocuments(request.firebase_uid);
+        setDocuments(docsRes.data.documents || []);
+      } catch {
+        setDocuments([]);
+      }
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, [request.id, request.firebase_uid]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoadingDocs(true);
-      try {
-        const detailRes = await getOnboardingRequest(request.id);
-        if (!cancelled) {
-          setDocuments(detailRes.data.documents || []);
-        }
-      } catch {
-        if (!cancelled) {
-          try {
-            const docsRes = await listUserDocuments(request.firebase_uid);
-            if (!cancelled) setDocuments(docsRes.data.documents || []);
-          } catch {
-            if (!cancelled) setDocuments([]);
-          }
-        }
-      } finally {
-        if (!cancelled) setLoadingDocs(false);
-      }
+    loadDocuments();
+  }, [loadDocuments]);
+
+  async function handleDownload(doc: UserDocument) {
+    setDownloadingId(doc.id);
+    try {
+      const res = await getDocumentDownloadUrl(request.firebase_uid, doc.id);
+      window.open(res.data.url, "_blank");
+    } catch {
+      alert("Failed to get download link. The file may not exist in storage.");
+    } finally {
+      setDownloadingId(null);
     }
-    load();
-    return () => { cancelled = true; };
-  }, [request.id, request.firebase_uid]);
+  }
+
+  async function handleReview(doc: UserDocument, status: "approved" | "rejected") {
+    setReviewingId(doc.id);
+    try {
+      await reviewDocument(request.firebase_uid, doc.id, status);
+      await loadDocuments();
+    } catch {
+      alert(`Failed to ${status} document.`);
+    } finally {
+      setReviewingId(null);
+    }
+  }
 
   return (
     <div className="mt-3 border-t pt-4 space-y-4">
@@ -176,19 +202,53 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
                 key={doc.id}
                 className="flex items-center justify-between rounded border px-3 py-2 text-sm"
               >
-                <div className="flex items-center gap-2">
-                  <FileText className="size-3.5 text-muted-foreground" />
-                  <span className="font-medium">{doc.file_name}</span>
-                  <Badge variant="outline" className="text-[10px]">{doc.doc_type}</Badge>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <FileText className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="font-medium truncate">{doc.file_name}</span>
+                  <Badge variant="outline" className="text-[10px] shrink-0">{doc.doc_type}</Badge>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 shrink-0 ml-2">
                   <Badge
                     variant={doc.review_status === "approved" ? "default" : doc.review_status === "rejected" ? "destructive" : "outline"}
                     className="text-[10px]"
                   >
                     {doc.review_status}
                   </Badge>
-                  <span>{new Date(doc.uploaded_at).toLocaleDateString()}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(doc.uploaded_at).toLocaleDateString()}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    title="Download"
+                    disabled={downloadingId === doc.id}
+                    onClick={() => handleDownload(doc)}
+                  >
+                    {downloadingId === doc.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                  </Button>
+                  {doc.review_status !== "approved" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-emerald-500 hover:text-emerald-400"
+                      title="Approve document"
+                      disabled={reviewingId === doc.id}
+                      onClick={() => handleReview(doc, "approved")}
+                    >
+                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3.5" />}
+                    </Button>
+                  )}
+                  {doc.review_status !== "rejected" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-destructive hover:text-destructive/80"
+                      title="Reject document"
+                      disabled={reviewingId === doc.id}
+                      onClick={() => handleReview(doc, "rejected")}
+                    >
+                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3.5" />}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
