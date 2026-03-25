@@ -19,6 +19,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,7 +33,10 @@ import {
   approveRequest,
   rejectRequest,
   type OnboardingRequest,
+  type AppGrant,
 } from "@/lib/api/onboarding-requests";
+import { listApplications } from "@/lib/api/applications";
+import type { Application } from "@/lib/api/types";
 import { CheckCircle2, XCircle, Clock, Eye, Loader2 } from "lucide-react";
 import Link from "next/link";
 
@@ -52,6 +57,10 @@ export default function OnboardingRequestsPage() {
   const [actionNote, setActionNote] = React.useState("");
   const [actionRole, setActionRole] = React.useState("client");
   const [actionInProgress, setActionInProgress] = React.useState(false);
+  const [apps, setApps] = React.useState<Application[]>([]);
+  const [selectedApps, setSelectedApps] = React.useState<
+    Record<string, { selected: boolean; role: string }>
+  >({});
 
   const fetchRequests = React.useCallback(async () => {
     setLoading(true);
@@ -70,17 +79,48 @@ export default function OnboardingRequestsPage() {
     fetchRequests();
   }, [fetchRequests]);
 
+  React.useEffect(() => {
+    listApplications()
+      .then((res) => setApps(res.data.applications || []))
+      .catch(() => setApps([]));
+  }, []);
+
+  const toggleApp = (appId: string) => {
+    setSelectedApps((prev) => ({
+      ...prev,
+      [appId]: {
+        selected: !prev[appId]?.selected,
+        role: prev[appId]?.role || "viewer",
+      },
+    }));
+  };
+
+  const setAppRole = (appId: string, role: string) => {
+    setSelectedApps((prev) => ({
+      ...prev,
+      [appId]: { ...prev[appId], selected: true, role },
+    }));
+  };
+
   async function handleAction() {
     if (!actionDialog) return;
     setActionInProgress(true);
     try {
       if (actionDialog.type === "approve") {
-        await approveRequest(actionDialog.request.id, actionNote, actionRole);
+        const appGrants: AppGrant[] = Object.entries(selectedApps)
+          .filter(([, v]) => v.selected)
+          .map(([appId, v]) => ({
+            app_id: appId,
+            role: v.role,
+            environments: ["dev", "staging", "prod"],
+          }));
+        await approveRequest(actionDialog.request.id, actionNote, actionRole, appGrants);
       } else {
         await rejectRequest(actionDialog.request.id, actionNote, false);
       }
       setActionDialog(null);
       setActionNote("");
+      setSelectedApps({});
       fetchRequests();
     } catch {
       /* error handling */
@@ -227,19 +267,53 @@ export default function OnboardingRequestsPage() {
             </DialogDescription>
           </DialogHeader>
           {actionDialog?.type === "approve" && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Role</label>
-              <Select value={actionRole} onValueChange={setActionRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="client">Client</SelectItem>
-                  <SelectItem value="collaborator">Collaborator</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Role</Label>
+                <Select value={actionRole} onValueChange={setActionRole}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="collaborator">Collaborator</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Grant Application Access</Label>
+                <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-2">
+                  {apps.map((app) => (
+                    <div key={app.app_id} className="flex items-center gap-3 py-1">
+                      <Checkbox
+                        id={`umu-app-${app.app_id}`}
+                        checked={selectedApps[app.app_id]?.selected || false}
+                        onCheckedChange={() => toggleApp(app.app_id)}
+                      />
+                      <label htmlFor={`umu-app-${app.app_id}`} className="flex-1 text-sm cursor-pointer">
+                        {app.name}
+                      </label>
+                      {selectedApps[app.app_id]?.selected && (
+                        <Select
+                          value={selectedApps[app.app_id]?.role || "viewer"}
+                          onValueChange={(v) => setAppRole(app.app_id, v)}
+                        >
+                          <SelectTrigger className="w-24 h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="viewer">Viewer</SelectItem>
+                            <SelectItem value="editor">Editor</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
           <div className="space-y-2">
             <label className="text-sm font-medium">Note (optional)</label>

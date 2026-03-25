@@ -31,6 +31,7 @@ import {
   ChevronDown,
   GitBranch,
   Inbox,
+  Bell,
 } from "lucide-react";
 
 interface NavSection {

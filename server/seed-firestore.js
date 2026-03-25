@@ -80,11 +80,7 @@ async function grantAdmin(uid) {
       .get();
     if (!existing.empty) {
       await existing.docs[0].ref.set(
-        {
-          role: "admin",
-          environments: ["dev", "staging", "prod"],
-          updated_at: now,
-        },
+        { role: "admin", environments: ["dev", "staging", "prod"], updated_at: now },
         { merge: true },
       );
       console.log(`  Updated ${app.app_id} → admin`);
@@ -104,16 +100,11 @@ async function grantAdmin(uid) {
     }
   }
 
-  await admin
-    .auth()
-    .setCustomUserClaims(uid, { role: "admin", source: "seed" });
-  await firestore
-    .collection("user_profiles")
-    .doc(uid)
-    .set(
-      { status: "active", role: "admin", last_modified: now },
-      { merge: true },
-    );
+  await admin.auth().setCustomUserClaims(uid, { role: "admin", source: "seed" });
+  await firestore.collection("user_profiles").doc(uid).set(
+    { status: "active", role: "admin", last_modified: now },
+    { merge: true },
+  );
   console.log("  Admin claims and profile set.");
 }
 
