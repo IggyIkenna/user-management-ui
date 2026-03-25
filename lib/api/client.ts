@@ -1,3 +1,5 @@
+import { firebaseAuth } from "@/lib/firebase";
+
 const API_BASE_URL = "/api/v1";
 
 interface RequestOptions extends RequestInit {
@@ -17,16 +19,12 @@ function buildQueryString(
   );
 }
 
-function getSessionToken(): string {
-  try {
-    return (
-      localStorage.getItem("session_token") ||
-      localStorage.getItem("access_token") ||
-      ""
-    );
-  } catch {
-    return "";
+async function getFreshToken(): Promise<string> {
+  const currentUser = firebaseAuth.currentUser;
+  if (currentUser) {
+    return currentUser.getIdToken();
   }
+  return localStorage.getItem("session_token") || "";
 }
 
 async function request<T>(
@@ -37,7 +35,7 @@ async function request<T>(
 ): Promise<T> {
   const { params, headers, ...init } = options ?? {};
   const qs = params ? buildQueryString(params) : "";
-  const token = getSessionToken();
+  const token = await getFreshToken();
   const finalHeaders: HeadersInit = {
     ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     ...(headers || {}),

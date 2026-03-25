@@ -9,6 +9,12 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onIdTokenChanged,
+} from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase";
 import type { AuthUser, Entitlement, EffectiveAccessResult } from "@/lib/api/types";
 import { apiClient } from "@/lib/api/client";
 
@@ -75,31 +81,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (savedToken && savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser) as AuthUser;
-        setToken(savedToken);
-        setUser(parsed);
-      } catch {
+    const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const freshToken = await firebaseUser.getIdToken();
+        localStorage.setItem(TOKEN_KEY, freshToken);
+        setToken(freshToken);
+
+        const savedUser = localStorage.getItem(USER_KEY);
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser) as AuthUser);
+          } catch {
+            const profile = await fetchProfile(firebaseUser.uid);
+            if (profile) {
+              localStorage.setItem(USER_KEY, JSON.stringify(profile));
+              setUser(profile);
+            }
+          }
+        } else {
+          const profile = await fetchProfile(firebaseUser.uid);
+          if (profile) {
+            localStorage.setItem(USER_KEY, JSON.stringify(profile));
+            setUser(profile);
+          }
+        }
+      } else {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
+        setToken(null);
+        setUser(null);
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
-      const res = await apiClient.post<{ token: string; uid: string }>("/auth/login", {
-        email,
-        password,
-      });
-      const { token: newToken, uid } = res.data;
-      localStorage.setItem(TOKEN_KEY, newToken);
-      setToken(newToken);
-      const profile = await fetchProfile(uid);
+      const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      const freshToken = await cred.user.getIdToken();
+      localStorage.setItem(TOKEN_KEY, freshToken);
+      setToken(freshToken);
+      const profile = await fetchProfile(cred.user.uid);
       if (profile) {
         localStorage.setItem(USER_KEY, JSON.stringify(profile));
         setUser(profile);
@@ -111,7 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await signOut(firebaseAuth);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setUser(null);
