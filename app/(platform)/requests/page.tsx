@@ -99,10 +99,20 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
 
   async function handleDownload(doc: UserDocument) {
     setDownloadingId(doc.id);
+    const newTab = window.open("about:blank", "_blank");
     try {
       const res = await getDocumentDownloadUrl(request.firebase_uid, doc.id);
-      window.open(res.data.url, "_blank");
+      if (newTab) {
+        newTab.location.href = res.data.url;
+      } else {
+        const a = document.createElement("a");
+        a.href = res.data.url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
+      }
     } catch {
+      if (newTab) newTab.close();
       alert("Failed to get download link. The file may not exist in storage.");
     } finally {
       setDownloadingId(null);
@@ -216,37 +226,37 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
                   </Badge>
                   <span className="text-xs text-muted-foreground">{new Date(doc.uploaded_at).toLocaleDateString()}</span>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-7 w-7 p-0"
-                    title="Download"
+                    className="h-7 text-xs px-2"
                     disabled={downloadingId === doc.id}
                     onClick={() => handleDownload(doc)}
                   >
-                    {downloadingId === doc.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                    {downloadingId === doc.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <Download className="size-3 mr-1" />}
+                    View
                   </Button>
                   {doc.review_status !== "approved" && (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0 text-emerald-500 hover:text-emerald-400"
-                      title="Approve document"
+                      className="h-7 text-xs px-2 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
                       disabled={reviewingId === doc.id}
                       onClick={() => handleReview(doc, "approved")}
                     >
-                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3.5" />}
+                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <Check className="size-3 mr-1" />}
+                      Approve
                     </Button>
                   )}
                   {doc.review_status !== "rejected" && (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0 text-destructive hover:text-destructive/80"
-                      title="Reject document"
+                      className="h-7 text-xs px-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive/80"
                       disabled={reviewingId === doc.id}
                       onClick={() => handleReview(doc, "rejected")}
                     >
-                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3.5" />}
+                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <X className="size-3 mr-1" />}
+                      Reject
                     </Button>
                   )}
                 </div>
