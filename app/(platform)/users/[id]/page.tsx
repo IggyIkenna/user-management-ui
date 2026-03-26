@@ -208,10 +208,20 @@ export default function UserDetailPage() {
 
   async function handleDocDownload(docId: string) {
     setDownloadingDocId(docId);
+    const newTab = window.open("about:blank", "_blank");
     try {
       const res = await getDocumentDownloadUrl(userId, docId);
-      window.open(res.data.url, "_blank");
+      if (newTab) {
+        newTab.location.href = res.data.url;
+      } else {
+        const a = document.createElement("a");
+        a.href = res.data.url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
+      }
     } catch {
+      if (newTab) newTab.close();
       setError("Failed to get download link.");
     } finally {
       setDownloadingDocId(null);
