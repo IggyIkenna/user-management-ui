@@ -653,23 +653,27 @@ export default function UserDetailPage() {
                       {formatDateTime(doc.uploaded_at)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
+                      <div className="flex gap-2 flex-wrap items-center">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-7 text-xs"
-                          title="Download"
+                          className="h-7 text-xs px-2 whitespace-nowrap"
+                          title="View document"
                           disabled={downloadingDocId === doc.id}
                           onClick={() => handleDocDownload(doc.id)}
                         >
-                          {downloadingDocId === doc.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5 mr-1" />}
+                          {downloadingDocId === doc.id ? (
+                            <Loader2 className="size-3 animate-spin mr-1" />
+                          ) : (
+                            <Download className="size-3 mr-1" />
+                          )}
                           View
                         </Button>
                         {doc.review_status !== "approved" && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-7 text-xs"
+                            className="h-7 text-xs px-2 whitespace-nowrap text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
                             onClick={async () => {
                               await reviewDocument(userId, doc.id, "approved");
                               loadData();
@@ -680,9 +684,9 @@ export default function UserDetailPage() {
                         )}
                         {doc.review_status !== "rejected" && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-7 text-xs text-destructive"
+                            className="h-7 text-xs px-2 whitespace-nowrap text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive/80"
                             onClick={async () => {
                               await reviewDocument(userId, doc.id, "rejected");
                               loadData();
