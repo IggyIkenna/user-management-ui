@@ -105,11 +105,7 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
       if (newTab) {
         newTab.location.href = res.data.url;
       } else {
-        const a = document.createElement("a");
-        a.href = res.data.url;
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.click();
+        window.location.assign(res.data.url);
       }
     } catch {
       if (newTab) newTab.close();
