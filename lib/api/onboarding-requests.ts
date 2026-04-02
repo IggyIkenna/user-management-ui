@@ -41,9 +41,10 @@ export async function listOnboardingRequests(status?: string) {
 }
 
 export async function getOnboardingRequest(id: string) {
-  return apiClient.get<{ request: OnboardingRequest; documents: UserDocument[] }>(
-    `/onboarding-requests/${id}`,
-  );
+  return apiClient.get<{
+    request: OnboardingRequest;
+    documents: UserDocument[];
+  }>(`/onboarding-requests/${id}`);
 }
 
 export interface AppGrant {
@@ -58,13 +59,22 @@ export async function approveRequest(
   role?: string,
   appGrants?: AppGrant[],
 ) {
-  return apiClient.post<{ request: OnboardingRequest; user_status: string; granted_apps: string[] }>(
-    `/onboarding-requests/${id}/approve`,
-    { note, role, app_grants: appGrants },
-  );
+  return apiClient.post<{
+    request: OnboardingRequest;
+    user_status: string;
+    granted_apps: string[];
+  }>(`/onboarding-requests/${id}/approve`, {
+    note,
+    role,
+    app_grants: appGrants,
+  });
 }
 
-export async function rejectRequest(id: string, note?: string, deleteUser?: boolean) {
+export async function rejectRequest(
+  id: string,
+  note?: string,
+  deleteUser?: boolean,
+) {
   return apiClient.post<{ request: OnboardingRequest }>(
     `/onboarding-requests/${id}/reject`,
     { note, delete_user: deleteUser },
@@ -87,4 +97,12 @@ export async function reviewDocument(
     `/users/${uid}/documents/${docId}/review`,
     { status, note },
   );
+}
+
+export async function getDocumentDownloadUrl(uid: string, docId: string) {
+  return apiClient.get<{
+    url: string;
+    file_name: string;
+    content_type: string;
+  }>(`/users/${uid}/documents/${docId}/download`);
 }

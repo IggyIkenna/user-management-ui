@@ -162,11 +162,18 @@ export default function UserDetailPage() {
   const [error, setError] = React.useState("");
   const [reprovisioning, setReprovisioning] = React.useState(false);
 
+  const [downloadingDocId, setDownloadingDocId] = React.useState<string | null>(
+    null,
+  );
+
   const [adminNewPassword, setAdminNewPassword] = React.useState("");
   const [adminConfirmPassword, setAdminConfirmPassword] = React.useState("");
   const [adminPasswordSaving, setAdminPasswordSaving] = React.useState(false);
   const [adminPasswordError, setAdminPasswordError] = React.useState("");
   const [adminPasswordSuccess, setAdminPasswordSuccess] = React.useState(false);
+  const [workEmailLocalPart, setWorkEmailLocalPart] = React.useState("");
+  const [issuingWorkEmail, setIssuingWorkEmail] = React.useState(false);
+  const [workEmailMessage, setWorkEmailMessage] = React.useState("");
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -213,23 +220,6 @@ export default function UserDetailPage() {
     }
     setWorkEmailLocalPart((user.email || "").split("@")[0] || "");
   }, [user]);
-
-  const loadM365Licenses = React.useCallback(async () => {
-    if (!isAdmin()) return;
-    try {
-      setM365LicensesLoading(true);
-      const res = await getMicrosoft365Licenses(userId);
-      setM365Licenses(res.data.licenses || []);
-    } catch {
-      setM365Licenses([]);
-    } finally {
-      setM365LicensesLoading(false);
-    }
-  }, [isAdmin, userId]);
-
-  React.useEffect(() => {
-    loadM365Licenses();
-  }, [loadM365Licenses]);
 
   const handleReprovision = async () => {
     setReprovisioning(true);
@@ -280,6 +270,37 @@ export default function UserDetailPage() {
       );
     } finally {
       setAdminPasswordSaving(false);
+    }
+  }
+
+  async function handleIssueWorkEmail() {
+    if (!user) return;
+    setError("");
+    setWorkEmailMessage("");
+    setIssuingWorkEmail(true);
+    const normalized = workEmailLocalPart.trim().toLowerCase();
+    if (!normalized) {
+      setIssuingWorkEmail(false);
+      setError("Work email local part is required.");
+      return;
+    }
+    if (!/^[a-z0-9._-]+$/.test(normalized)) {
+      setIssuingWorkEmail(false);
+      setError("Work email local part may only contain a-z, 0-9, ., _, and -.");
+      return;
+    }
+    try {
+      const res = await issueWorkEmail(user.firebase_uid, normalized);
+      setWorkEmailMessage(
+        `${res.data.created ? "Issued" : "Updated"} ${res.data.upn}`,
+      );
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to issue work email.",
+      );
+    } finally {
+      setIssuingWorkEmail(false);
     }
   }
 
@@ -451,7 +472,8 @@ export default function UserDetailPage() {
               Set password (admin)
             </CardTitle>
             <CardDescription>
-              Set a new password for {user.name}. They will use it on the next sign-in.
+              Set a new password for {user.name}. They will use it on the next
+              sign-in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 max-w-sm">
@@ -489,6 +511,49 @@ export default function UserDetailPage() {
               disabled={adminPasswordSaving}
             >
               {adminPasswordSaving ? "Saving…" : "Update password"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin() && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Issue Odum Work Email</CardTitle>
+            <CardDescription>
+              Create or refresh this user&apos;s Microsoft 365 account at{" "}
+              <span className="font-mono">@odum-research.com</span>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 max-w-md">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Current work email</Label>
+              <p className="text-sm text-muted-foreground">
+                {user.microsoft_upn || "Not issued yet"}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email local part</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={workEmailLocalPart}
+                  onChange={(e) => setWorkEmailLocalPart(e.target.value)}
+                  placeholder="first.last"
+                />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  @odum-research.com
+                </span>
+              </div>
+            </div>
+            {workEmailMessage && (
+              <p className="text-sm text-emerald-400">{workEmailMessage}</p>
+            )}
+            <Button
+              size="sm"
+              onClick={handleIssueWorkEmail}
+              disabled={issuingWorkEmail}
+            >
+              {issuingWorkEmail ? "Issuing…" : "Issue work email"}
             </Button>
           </CardContent>
         </Card>

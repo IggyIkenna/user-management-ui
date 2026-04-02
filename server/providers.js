@@ -914,7 +914,6 @@ export async function issueMicrosoftWorkEmail(profile, options = {}) {
     };
   }
 
-  const tempPassword = process.env.MS_TEMP_PASSWORD || "TempPass#2026!";
   const payload = {
     accountEnabled: true,
     displayName: profile.name,
@@ -922,7 +921,7 @@ export async function issueMicrosoftWorkEmail(profile, options = {}) {
     userPrincipalName: upn,
     passwordProfile: {
       forceChangePasswordNextSignIn: true,
-      password: tempPassword,
+      password: process.env.MS_TEMP_PASSWORD || "TempPass#2026!",
     },
   };
 
@@ -948,7 +947,6 @@ export async function issueMicrosoftWorkEmail(profile, options = {}) {
     status: 201,
     upn,
     created: true,
-    tempPassword,
     message: "Microsoft 365 account created.",
   };
 }
@@ -1292,39 +1290,23 @@ async function deprovisionM365(profile, secrets, action = "deactivate") {
       "Missing Microsoft Graph token.",
     );
   }
-  const graphUser = await resolveMicrosoftGraphUser(profile, token);
-  if (!graphUser) {
-    return na("microsoft365", "Microsoft 365", "M365 user not found.");
-  }
-  const normalizedAction = String(action || "deactivate").toLowerCase();
-  if (normalizedAction === "delete") {
-    const deleteRes = await graphRequest(
-      token,
-      `/users/${encodeURIComponent(graphUser.id)}`,
-      { method: "DELETE" },
-    );
-    if (!deleteRes.ok && deleteRes.status !== 404) {
-      return fail(
-        "microsoft365",
-        "Microsoft 365",
-        `Graph delete failed: ${await deleteRes.text()}`,
-      );
-    }
-    return ok("microsoft365", "Microsoft 365", "M365 account deleted.");
-  }
-  const patchRes = await graphRequest(
-    token,
-    `/users/${encodeURIComponent(graphUser.id)}`,
+  const upn = profile.microsoft_upn || profile.email;
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`,
     {
       method: "PATCH",
-      body: { accountEnabled: false },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ accountEnabled: false }),
     },
   );
-  if (!patchRes.ok && patchRes.status !== 404) {
+  if (!res.ok && res.status !== 404) {
     return fail(
       "microsoft365",
       "Microsoft 365",
-      `Graph deprovision failed: ${await patchRes.text()}`,
+      `Graph deprovision failed: ${await res.text()}`,
     );
   }
   return ok("microsoft365", "Microsoft 365", "M365 account disabled.");

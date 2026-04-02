@@ -39,10 +39,7 @@ test.describe("user lifecycle smoke", () => {
         });
       }
 
-      if (
-        method === "GET" &&
-        /^\/api\/v1\/users\/[^/]+$/.test(path)
-      ) {
+      if (method === "GET" && /^\/api\/v1\/users\/[^/]+$/.test(path)) {
         const id = path.split("/").pop() as string;
         const user = users.find((u) => u.id === id);
         return route.fulfill({
@@ -171,7 +168,9 @@ test.describe("user lifecycle smoke", () => {
   test("onboard flow", async ({ page }) => {
     await page.goto("/onboard");
     await page.getByPlaceholder("John Doe").fill("Smoke User");
-    await page.getByPlaceholder("john@odum-research.com").fill("smoke-user@test.com");
+    await page
+      .getByPlaceholder("john@odum-research.com")
+      .fill("smoke-user@test.com");
     await page.getByLabel("Role").click();
     await page.getByRole("option", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Onboard User" }).click();

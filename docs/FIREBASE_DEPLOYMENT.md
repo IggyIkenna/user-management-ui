@@ -2,10 +2,10 @@
 
 This repo uses **two Firebase surfaces** on the same GCP/Firebase project (`central-element-323112`). They use **dedicated resource names** so they do not collide with other apps (for example `unified-trading-system-ui`) on the default Hosting site.
 
-| Surface | Id in Firebase | Role | What gets deployed |
-|--------|----------------|------|---------------------|
+| Surface                  | Id in Firebase                     | Role            | What gets deployed                                                                                                                         |
+| ------------------------ | ---------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Firebase App Hosting** | Backend **`odum-user-mgmt-admin`** | Next.js runtime | The **Next.js** app (`next build` / `next start`). SSR, routing, **rewrites** of `/api/*` and `/health` → Express API (`next.config.mjs`). |
-| **Firebase Hosting** | Site **`odum-user-management`** | Static assets | Contents of **`public/`** (favicon, robots, etc.). Separate from the project default site and from other products’ Hosting deploys. |
+| **Firebase Hosting**     | Site **`odum-user-management`**    | Static assets   | Contents of **`public/`** (favicon, robots, etc.). Separate from the project default site and from other products’ Hosting deploys.        |
 
 ### One-time Firebase Console setup
 
@@ -27,12 +27,12 @@ The **Express** server in **`server/index.js`** is the **user-management API** (
 
 ## Configuration files
 
-| File | Purpose |
-|------|---------|
-| `firebase.json` | Declares the **App Hosting** backend id and **Hosting** `public` folder. |
+| File              | Purpose                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `firebase.json`   | Declares the **App Hosting** backend id and **Hosting** `public` folder.                                                            |
 | `apphosting.yaml` | **Runtime** env and secrets for the App Hosting backend (memory, `USER_MGMT_API_URL`, `FIREBASE_API_KEY`, GitHub PAT secret, etc.). |
-| `next.config.mjs` | Rewrites `/api/:path*` → `USER_MGMT_API_URL` (Express API). |
-| `.firebaserc` | Firebase project id (`default`). |
+| `next.config.mjs` | Rewrites `/api/:path*` → `USER_MGMT_API_URL` (Express API).                                                                         |
+| `.firebaserc`     | Firebase project id (`default`).                                                                                                    |
 
 ## Commands (local / CI)
 
