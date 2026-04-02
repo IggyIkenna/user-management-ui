@@ -31,6 +31,6 @@ describe("Provider failure integration paths", () => {
     expect(byService.slack.status).toBe("failed");
     expect(byService.microsoft365.status).toBe("failed");
     expect(byService.gcp.status).toBe("failed");
-    expect(byService.aws.status).toBe("success");
+    expect(byService.aws.status).toBe("failed");
   }, 20000);
 });

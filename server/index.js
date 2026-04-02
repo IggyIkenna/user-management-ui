@@ -23,6 +23,7 @@ for (const envFile of [".env.development", ".env.local", ".env"]) {
   }
 }
 import {
+  issueMicrosoftWorkEmail,
   runProviderDeprovisioning,
   runProviderHealthChecks,
   runProviderProvisioning,
@@ -179,20 +180,26 @@ async function writeAuditEntry(entry) {
 
 async function sendEmail({ to, subject, html }) {
   const toArray = Array.isArray(to) ? to : [to];
-  await firestore.collection("mail").add({
+  const doc = {
     to: toArray,
     message: { subject, html },
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  };
+  const replyTo = process.env.MAIL_REPLY_TO?.trim();
+  if (replyTo) {
+    doc.replyTo = replyTo;
+  }
+  await firestore.collection("mail").add(doc);
 }
 
 async function notifyAdminsForEvent(eventType, { subject, html }) {
   try {
-    const snap = await notificationPreferencesCollection()
-      .where("event_type", "==", eventType)
-      .where("enabled", "==", true)
-      .get();
-    const emails = snap.docs.map((d) => d.data().recipient_email).filter(Boolean);
+    const snap = await notificationPreferencesCollection().get();
+    const emails = snap.docs
+      .map((d) => d.data())
+      .filter((d) => d.event_type === eventType && d.enabled !== false)
+      .map((d) => d.recipient_email)
+      .filter(Boolean);
     if (emails.length > 0) {
       await sendEmail({ to: emails, subject, html });
     }
@@ -416,13 +423,14 @@ async function listUsersWithProfiles() {
     const profile = profileMap.get(u.uid) || {};
     const role = profile.role || u.customClaims?.role || "client";
     const profileStatus = profile.status;
-    const status = profileStatus === "pending_approval"
-      ? "pending_approval"
-      : profileStatus === "rejected"
-        ? "rejected"
-        : u.disabled
-          ? "offboarded"
-          : "active";
+    const status =
+      profileStatus === "pending_approval"
+        ? "pending_approval"
+        : profileStatus === "rejected"
+          ? "rejected"
+          : u.disabled
+            ? "offboarded"
+            : "active";
     const defaultServices = getDefaultServicesForUser(role, status);
     return {
       id: profile.id || u.uid,
@@ -529,7 +537,11 @@ function serviceApplicability(role) {
 }
 
 function getDefaultServicesForUser(role, status) {
-  if (status === "offboarded" || status === "pending_approval" || status === "rejected") {
+  if (
+    status === "offboarded" ||
+    status === "pending_approval" ||
+    status === "rejected"
+  ) {
     return {
       github: "not_applicable",
       slack: "not_applicable",
@@ -1370,6 +1382,92 @@ app.post("/api/v1/users/:id/reprovision", async (req, res) => {
   }
 });
 
+app.post("/api/v1/users/:id/issue-work-email", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor || !(await isPlatformAdmin(actor.uid))) {
+      return res
+        .status(403)
+        .json({ error: "Only platform admins can issue work email." });
+    }
+
+    const id = await resolveUserUid(req.params.id);
+    const profileRef = usersCollection().doc(id);
+    const snapshot = await profileRef.get();
+    if (!snapshot.exists) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+
+    const profile = snapshot.data() || {};
+    const providedLocalPart = String(req.body?.local_part || "")
+      .trim()
+      .toLowerCase();
+    if (providedLocalPart && !/^[a-z0-9._-]+$/.test(providedLocalPart)) {
+      return res.status(400).json({
+        error:
+          "local_part may only contain lowercase letters, numbers, dot, underscore, and hyphen.",
+      });
+    }
+
+    const result = await issueMicrosoftWorkEmail(
+      { ...profile, firebase_uid: id },
+      { localPart: providedLocalPart || undefined },
+    );
+    if (!result.ok) {
+      return res
+        .status(result.status || 500)
+        .json({ error: result.error || "Failed to issue work email." });
+    }
+
+    const now = new Date().toISOString();
+    const previousUpn = profile.microsoft_upn || null;
+    await profileRef.set(
+      {
+        microsoft_upn: result.upn,
+        services: {
+          ...(profile.services || {}),
+          microsoft365: "provisioned",
+        },
+        service_messages: {
+          ...(profile.service_messages || {}),
+          microsoft365: result.message || "Microsoft 365 account provisioned.",
+        },
+        service_synced_at: {
+          ...(profile.service_synced_at || {}),
+          microsoft365: now,
+        },
+        workflow_failure_reason:
+          profile.workflow_failure_reason &&
+          String(profile.workflow_failure_reason).includes("Microsoft 365")
+            ? null
+            : profile.workflow_failure_reason || null,
+        last_modified: now,
+      },
+      { merge: true },
+    );
+
+    await writeAuditEntry({
+      action: "microsoft365.work_email_issued",
+      actor: actor.uid,
+      firebase_uid: id,
+      previous_upn: previousUpn,
+      new_upn: result.upn,
+      created: Boolean(result.created),
+      message: result.message,
+    });
+
+    const updated = await profileRef.get();
+    return res.json({
+      upn: result.upn,
+      created: Boolean(result.created),
+      message: result.message,
+      user: { firebase_uid: id, ...(updated.data() || {}) },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Applications registry
 // ---------------------------------------------------------------------------
@@ -2188,7 +2286,9 @@ app.get("/api/v1/authorize", async (req, res) => {
     }
 
     const profileSnap = await usersCollection().doc(uid).get();
-    const userStatus = profileSnap.exists ? profileSnap.data()?.status || "unknown" : "unknown";
+    const userStatus = profileSnap.exists
+      ? profileSnap.data()?.status || "unknown"
+      : "unknown";
 
     if (!bestRole) {
       return res.json({
@@ -2267,7 +2367,9 @@ app.put("/api/v1/settings/profile", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (uid !== actor.uid && !(await isPlatformAdmin(actor.uid))) {
-      return res.status(403).json({ error: "You can only update your own profile unless you are an admin." });
+      return res.status(403).json({
+        error: "You can only update your own profile unless you are an admin.",
+      });
     }
     const updates = {};
     if (displayName !== undefined) updates.displayName = displayName;
@@ -2402,56 +2504,102 @@ app.post("/api/v1/signup", async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.email || !payload.name || !payload.password) {
-      return res.status(400).json({ error: "name, email, and password are required." });
+      return res
+        .status(400)
+        .json({ error: "name, email, and password are required." });
     }
     if (payload.password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters." });
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 6 characters." });
     }
 
-    const firebaseUser = await auth.createUser({
-      email: payload.email,
-      displayName: payload.name,
-      password: payload.password,
-      disabled: true,
-    });
+    let firebaseUser;
+    let isExistingUser = false;
+    try {
+      firebaseUser = await auth.createUser({
+        email: payload.email,
+        displayName: payload.name,
+        password: payload.password,
+        disabled: true,
+      });
+    } catch (createErr) {
+      const errStr = String(createErr);
+      if (
+        errStr.includes("email-already-exists") ||
+        errStr.includes("already in use") ||
+        createErr?.code === "auth/email-already-exists"
+      ) {
+        firebaseUser = await auth.getUserByEmail(payload.email);
+        isExistingUser = true;
+      } else {
+        throw createErr;
+      }
+    }
 
-    await auth.setCustomUserClaims(firebaseUser.uid, {
-      role: "client",
-      source: "self-signup",
-    });
+    if (!isExistingUser) {
+      await auth.setCustomUserClaims(firebaseUser.uid, {
+        role: "client",
+        source: "self-signup",
+      });
+    }
 
     const now = new Date().toISOString();
-    const profile = {
-      id: firebaseUser.uid,
-      name: payload.name,
-      email: payload.email,
-      role: "client",
-      status: "pending_approval",
-      company: payload.company || null,
-      phone: payload.phone || null,
-      provisioned_at: null,
-      last_modified: now,
-      created_at: now,
-      services: getDefaultServicesForUser("client", "pending_approval"),
-    };
-    await usersCollection().doc(firebaseUser.uid).set(profile);
 
-    const requestDoc = {
-      firebase_uid: firebaseUser.uid,
-      applicant_name: payload.name,
-      applicant_email: payload.email,
-      company: payload.company || null,
-      phone: payload.phone || null,
-      service_type: payload.service_type || "general",
-      selected_options: payload.selected_options || [],
-      expected_aum: payload.expected_aum || null,
-      status: "pending",
-      reviewer_uid: null,
-      review_note: "",
-      created_at: now,
-      updated_at: now,
-    };
-    const reqRef = await onboardingRequestsCollection().add(requestDoc);
+    const existingProfile = await usersCollection().doc(firebaseUser.uid).get();
+    let profile;
+    if (existingProfile.exists) {
+      profile = { id: firebaseUser.uid, ...existingProfile.data() };
+    } else {
+      profile = {
+        id: firebaseUser.uid,
+        name: payload.name,
+        email: payload.email,
+        role: "client",
+        status: "pending_approval",
+        company: payload.company || null,
+        phone: payload.phone || null,
+        provisioned_at: null,
+        last_modified: now,
+        created_at: now,
+        services: getDefaultServicesForUser("client", "pending_approval"),
+      };
+      await usersCollection().doc(firebaseUser.uid).set(profile);
+    }
+
+    const existingReqSnap = await onboardingRequestsCollection()
+      .where("firebase_uid", "==", firebaseUser.uid)
+      .get();
+    let reqRef;
+    if (!existingReqSnap.empty) {
+      reqRef = existingReqSnap.docs[0].ref;
+      await reqRef.update({
+        applicant_name: payload.name,
+        company: payload.company || null,
+        phone: payload.phone || null,
+        service_type: payload.service_type || "general",
+        selected_options: payload.selected_options || [],
+        expected_aum: payload.expected_aum || null,
+        updated_at: now,
+      });
+    } else {
+      const requestDoc = {
+        firebase_uid: firebaseUser.uid,
+        applicant_name: payload.name,
+        applicant_email: payload.email,
+        company: payload.company || null,
+        phone: payload.phone || null,
+        service_type: payload.service_type || "general",
+        selected_options: payload.selected_options || [],
+        expected_aum: payload.expected_aum || null,
+        status: "pending",
+        reviewer_uid: null,
+        review_note: "",
+        created_at: now,
+        updated_at: now,
+      };
+      reqRef = await onboardingRequestsCollection().add(requestDoc);
+    }
 
     await writeAuditEntry({
       action: "signup.submitted",
@@ -2480,9 +2628,6 @@ app.post("/api/v1/signup", async (req, res) => {
       onboarding_request_id: reqRef.id,
     });
   } catch (error) {
-    if (String(error).includes("email-already-exists")) {
-      return res.status(409).json({ error: "An account with this email already exists." });
-    }
     res.status(500).json({ error: String(error) });
   }
 });
@@ -2494,14 +2639,15 @@ app.post("/api/v1/signup", async (req, res) => {
 app.get("/api/v1/onboarding-requests", async (req, res) => {
   try {
     const status = req.query.status;
-    let query = onboardingRequestsCollection().orderBy("created_at", "desc");
+    const snapshot = await onboardingRequestsCollection().get();
+    let requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     if (status) {
-      query = onboardingRequestsCollection()
-        .where("status", "==", status)
-        .orderBy("created_at", "desc");
+      requests = requests.filter((r) => r.status === status);
     }
-    const snapshot = await query.limit(200).get();
-    const requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    requests.sort((a, b) =>
+      (b.created_at || "").localeCompare(a.created_at || ""),
+    );
+    requests = requests.slice(0, 200);
     res.json({ requests, total: requests.length });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2532,7 +2678,9 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res.status(403).json({ error: "Only admins can approve requests." });
+      return res
+        .status(403)
+        .json({ error: "Only admins can approve requests." });
     }
 
     const ref = onboardingRequestsCollection().doc(req.params.id);
@@ -2542,27 +2690,36 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
     }
     const request = doc.data();
     if (request.status !== "pending") {
-      return res.status(409).json({ error: `Request is already ${request.status}.` });
+      return res
+        .status(409)
+        .json({ error: `Request is already ${request.status}.` });
     }
 
     const now = new Date().toISOString();
     const note = req.body?.note || "";
     const role = req.body?.role || "client";
-    const appGrants = Array.isArray(req.body?.app_grants) ? req.body.app_grants : [];
+    const appGrants = Array.isArray(req.body?.app_grants)
+      ? req.body.app_grants
+      : [];
 
     await auth.updateUser(request.firebase_uid, { disabled: false });
-    await auth.setCustomUserClaims(request.firebase_uid, { role, source: "admin-approved" });
+    await auth.setCustomUserClaims(request.firebase_uid, {
+      role,
+      source: "admin-approved",
+    });
 
-    await usersCollection().doc(request.firebase_uid).set(
-      {
-        status: "active",
-        role,
-        provisioned_at: now,
-        last_modified: now,
-        services: getDefaultServicesForUser(role, "active"),
-      },
-      { merge: true },
-    );
+    await usersCollection()
+      .doc(request.firebase_uid)
+      .set(
+        {
+          status: "active",
+          role,
+          provisioned_at: now,
+          last_modified: now,
+          services: getDefaultServicesForUser(role, "active"),
+        },
+        { merge: true },
+      );
 
     await ref.set(
       {
@@ -2585,7 +2742,11 @@ app.post("/api/v1/onboarding-requests/:id/approve", async (req, res) => {
         .get();
       if (!existing.empty) {
         await existing.docs[0].ref.set(
-          { role: grant.role || "viewer", environments: grant.environments || ["prod"], updated_at: now },
+          {
+            role: grant.role || "viewer",
+            environments: grant.environments || ["prod"],
+            updated_at: now,
+          },
           { merge: true },
         );
       } else {
@@ -2645,7 +2806,9 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res.status(403).json({ error: "Only admins can reject requests." });
+      return res
+        .status(403)
+        .json({ error: "Only admins can reject requests." });
     }
 
     const ref = onboardingRequestsCollection().doc(req.params.id);
@@ -2655,7 +2818,9 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
     }
     const request = doc.data();
     if (request.status !== "pending") {
-      return res.status(409).json({ error: `Request is already ${request.status}.` });
+      return res
+        .status(409)
+        .json({ error: `Request is already ${request.status}.` });
     }
 
     const now = new Date().toISOString();
@@ -2670,10 +2835,9 @@ app.post("/api/v1/onboarding-requests/:id/reject", async (req, res) => {
       }
       await usersCollection().doc(request.firebase_uid).delete();
     } else {
-      await usersCollection().doc(request.firebase_uid).set(
-        { status: "rejected", last_modified: now },
-        { merge: true },
-      );
+      await usersCollection()
+        .doc(request.firebase_uid)
+        .set({ status: "rejected", last_modified: now }, { merge: true });
     }
 
     await ref.set(
@@ -2738,9 +2902,15 @@ app.post("/api/v1/users/:uid/documents", async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.doc_type || !payload.file_name || !payload.storage_path) {
-      return res.status(400).json({ error: "doc_type, file_name, and storage_path are required." });
+      return res
+        .status(400)
+        .json({ error: "doc_type, file_name, and storage_path are required." });
     }
-    const document = await createUserDocumentRecord(req.params.uid, payload, "user");
+    const document = await createUserDocumentRecord(
+      req.params.uid,
+      payload,
+      "user",
+    );
     res.status(201).json({ document });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -2805,7 +2975,9 @@ app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res.status(403).json({ error: "Only admins can review documents." });
+      return res
+        .status(403)
+        .json({ error: "Only admins can review documents." });
     }
 
     const ref = userDocumentsCollection().doc(req.params.docId);
@@ -2814,12 +2986,16 @@ app.put("/api/v1/users/:uid/documents/:docId/review", async (req, res) => {
       return res.status(404).json({ error: "Document not found." });
     }
     if (doc.data().firebase_uid !== req.params.uid) {
-      return res.status(404).json({ error: "Document does not belong to this user." });
+      return res
+        .status(404)
+        .json({ error: "Document does not belong to this user." });
     }
 
     const status = req.body?.status;
     if (!["approved", "rejected", "pending"].includes(status)) {
-      return res.status(400).json({ error: "status must be approved, rejected, or pending." });
+      return res
+        .status(400)
+        .json({ error: "status must be approved, rejected, or pending." });
     }
 
     await ref.set(
@@ -2854,12 +3030,16 @@ app.get("/api/v1/users/:uid/documents/:docId/download", async (req, res) => {
       return res.status(404).json({ error: "Document not found." });
     }
     if (doc.data().firebase_uid !== req.params.uid) {
-      return res.status(404).json({ error: "Document does not belong to this user." });
+      return res
+        .status(404)
+        .json({ error: "Document does not belong to this user." });
     }
 
     const storagePath = doc.data().storage_path;
     if (!storagePath) {
-      return res.status(404).json({ error: "No file stored for this document." });
+      return res
+        .status(404)
+        .json({ error: "No file stored for this document." });
     }
 
     const file = storageBucket.file(storagePath);
@@ -3221,7 +3401,9 @@ app.post("/api/v1/apps/register", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
     if (!(await isPlatformAdmin(actor.uid))) {
-      return res.status(403).json({ error: "Only admins can register applications." });
+      return res
+        .status(403)
+        .json({ error: "Only admins can register applications." });
     }
 
     const payload = req.body || {};
@@ -3242,18 +3424,31 @@ app.post("/api/v1/apps/register", async (req, res) => {
       created_at: now,
       updated_at: now,
     };
-    await applicationsCollection().doc(payload.app_id).set(appDoc, { merge: true });
+    await applicationsCollection()
+      .doc(payload.app_id)
+      .set(appDoc, { merge: true });
 
     if (Array.isArray(payload.capabilities)) {
-      await appCapabilitiesCollection().doc(payload.app_id).set({
-        app_id: payload.app_id,
-        capabilities: payload.capabilities,
-        role_presets: payload.role_presets || { viewer: [], editor: [], admin: ["*"], owner: ["*"] },
-        updated_at: now,
-      });
+      await appCapabilitiesCollection()
+        .doc(payload.app_id)
+        .set({
+          app_id: payload.app_id,
+          capabilities: payload.capabilities,
+          role_presets: payload.role_presets || {
+            viewer: [],
+            editor: [],
+            admin: ["*"],
+            owner: ["*"],
+          },
+          updated_at: now,
+        });
     }
 
-    await writeAuditEntry({ action: "app.registered", app_id: payload.app_id, actor: actor.uid });
+    await writeAuditEntry({
+      action: "app.registered",
+      app_id: payload.app_id,
+      actor: actor.uid,
+    });
     res.status(201).json({ application: appDoc });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -3270,7 +3465,9 @@ app.get("/api/v1/notification-preferences", async (req, res) => {
     if (!actor || !(await isPlatformAdmin(actor.uid))) {
       return res.status(403).json({ error: "Admin access required." });
     }
-    const snapshot = await notificationPreferencesCollection().orderBy("created_at", "desc").get();
+    const snapshot = await notificationPreferencesCollection()
+      .orderBy("created_at", "desc")
+      .get();
     const prefs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     res.json({ preferences: prefs, total: prefs.length });
   } catch (error) {
@@ -3286,7 +3483,9 @@ app.post("/api/v1/notification-preferences", async (req, res) => {
     }
     const payload = req.body || {};
     if (!payload.event_type || !payload.recipient_email) {
-      return res.status(400).json({ error: "event_type and recipient_email are required." });
+      return res
+        .status(400)
+        .json({ error: "event_type and recipient_email are required." });
     }
     const now = new Date().toISOString();
     const docRef = await notificationPreferencesCollection().add({
@@ -3319,8 +3518,10 @@ app.put("/api/v1/notification-preferences/:id", async (req, res) => {
     const updates = {};
     if (req.body?.enabled !== undefined) updates.enabled = req.body.enabled;
     if (req.body?.event_type) updates.event_type = req.body.event_type;
-    if (req.body?.recipient_email) updates.recipient_email = req.body.recipient_email;
-    if (req.body?.recipient_name !== undefined) updates.recipient_name = req.body.recipient_name;
+    if (req.body?.recipient_email)
+      updates.recipient_email = req.body.recipient_email;
+    if (req.body?.recipient_name !== undefined)
+      updates.recipient_name = req.body.recipient_name;
     updates.updated_at = new Date().toISOString();
     await ref.set(updates, { merge: true });
     const updated = await ref.get();

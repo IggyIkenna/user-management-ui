@@ -64,7 +64,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: typeof Clock }> = {
+const STATUS_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: "default" | "secondary" | "outline" | "destructive";
+    icon: typeof Clock;
+  }
+> = {
   pending: { label: "Pending", variant: "outline", icon: Clock },
   approved: { label: "Approved", variant: "default", icon: CheckCircle2 },
   rejected: { label: "Rejected", variant: "destructive", icon: XCircle },
@@ -115,7 +122,10 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
     }
   }
 
-  async function handleReview(doc: UserDocument, status: "approved" | "rejected") {
+  async function handleReview(
+    doc: UserDocument,
+    status: "approved" | "rejected",
+  ) {
     setReviewingId(doc.id);
     try {
       await reviewDocument(request.firebase_uid, doc.id, status);
@@ -131,11 +141,15 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
     <div className="mt-3 border-t pt-4 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-foreground">Applicant Details</h4>
+          <h4 className="text-sm font-semibold text-foreground">
+            Applicant Details
+          </h4>
           <div className="space-y-1.5 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <User className="size-3.5 shrink-0" />
-              <span className="font-medium text-foreground">{request.applicant_name}</span>
+              <span className="font-medium text-foreground">
+                {request.applicant_name}
+              </span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Mail className="size-3.5 shrink-0" />
@@ -157,21 +171,35 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
         </div>
 
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-foreground">Service Request</h4>
+          <h4 className="text-sm font-semibold text-foreground">
+            Service Request
+          </h4>
           <div className="space-y-1.5 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Briefcase className="size-3.5 shrink-0" />
-              <span>Type: <span className="font-medium text-foreground">{request.service_type || "General"}</span></span>
+              <span>
+                Type:{" "}
+                <span className="font-medium text-foreground">
+                  {request.service_type || "General"}
+                </span>
+              </span>
             </div>
             {"expected_aum" in request && request.expected_aum ? (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <DollarSign className="size-3.5 shrink-0" />
-                <span>Expected AUM: <span className="font-medium text-foreground">{String(request.expected_aum)}</span></span>
+                <span>
+                  Expected AUM:{" "}
+                  <span className="font-medium text-foreground">
+                    {String(request.expected_aum)}
+                  </span>
+                </span>
               </div>
             ) : null}
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="size-3.5 shrink-0" />
-              <span>Submitted: {new Date(request.created_at).toLocaleString()}</span>
+              <span>
+                Submitted: {new Date(request.created_at).toLocaleString()}
+              </span>
             </div>
             {request.selected_options.length > 0 && (
               <div className="flex items-start gap-2 text-muted-foreground">
@@ -200,7 +228,9 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
             Loading documents...
           </div>
         ) : documents.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-1">No documents uploaded.</p>
+          <p className="text-sm text-muted-foreground py-1">
+            No documents uploaded.
+          </p>
         ) : (
           <div className="space-y-1.5">
             {documents.map((doc) => (
@@ -211,16 +241,26 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <FileText className="size-3.5 text-muted-foreground shrink-0" />
                   <span className="font-medium truncate">{doc.file_name}</span>
-                  <Badge variant="outline" className="text-[10px] shrink-0">{doc.doc_type}</Badge>
+                  <Badge variant="outline" className="text-[10px] shrink-0">
+                    {doc.doc_type}
+                  </Badge>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-2">
                   <Badge
-                    variant={doc.review_status === "approved" ? "default" : doc.review_status === "rejected" ? "destructive" : "outline"}
+                    variant={
+                      doc.review_status === "approved"
+                        ? "default"
+                        : doc.review_status === "rejected"
+                          ? "destructive"
+                          : "outline"
+                    }
                     className="text-[10px]"
                   >
                     {doc.review_status}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">{new Date(doc.uploaded_at).toLocaleDateString()}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(doc.uploaded_at).toLocaleDateString()}
+                  </span>
                   <Button
                     variant="outline"
                     size="sm"
@@ -228,7 +268,11 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
                     disabled={downloadingId === doc.id}
                     onClick={() => handleDownload(doc)}
                   >
-                    {downloadingId === doc.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <Download className="size-3 mr-1" />}
+                    {downloadingId === doc.id ? (
+                      <Loader2 className="size-3 animate-spin mr-1" />
+                    ) : (
+                      <Download className="size-3 mr-1" />
+                    )}
                     View
                   </Button>
                   {doc.review_status !== "approved" && (
@@ -239,7 +283,11 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
                       disabled={reviewingId === doc.id}
                       onClick={() => handleReview(doc, "approved")}
                     >
-                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <Check className="size-3 mr-1" />}
+                      {reviewingId === doc.id ? (
+                        <Loader2 className="size-3 animate-spin mr-1" />
+                      ) : (
+                        <Check className="size-3 mr-1" />
+                      )}
                       Approve
                     </Button>
                   )}
@@ -251,7 +299,11 @@ function RequestDetailPanel({ request }: { request: OnboardingRequest }) {
                       disabled={reviewingId === doc.id}
                       onClick={() => handleReview(doc, "rejected")}
                     >
-                      {reviewingId === doc.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <X className="size-3 mr-1" />}
+                      {reviewingId === doc.id ? (
+                        <Loader2 className="size-3 animate-spin mr-1" />
+                      ) : (
+                        <X className="size-3 mr-1" />
+                      )}
                       Reject
                     </Button>
                   )}
@@ -330,7 +382,8 @@ export default function OnboardingRequestsPage() {
     }));
   };
 
-  const allAppsSelected = apps.length > 0 && apps.every((a) => selectedApps[a.app_id]?.selected);
+  const allAppsSelected =
+    apps.length > 0 && apps.every((a) => selectedApps[a.app_id]?.selected);
 
   const toggleSelectAll = () => {
     if (allAppsSelected) {
@@ -372,7 +425,12 @@ export default function OnboardingRequestsPage() {
             role: v.role,
             environments: ["dev", "staging", "prod"],
           }));
-        await approveRequest(actionDialog.request.id, actionNote, actionRole, appGrants);
+        await approveRequest(
+          actionDialog.request.id,
+          actionNote,
+          actionRole,
+          appGrants,
+        );
       } else {
         await rejectRequest(actionDialog.request.id, actionNote, false);
       }
@@ -382,7 +440,9 @@ export default function OnboardingRequestsPage() {
       setSelectedApps({});
       fetchRequests();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Action failed. Please try again.");
+      setActionError(
+        err instanceof Error ? err.message : "Action failed. Please try again.",
+      );
     } finally {
       setActionInProgress(false);
     }
@@ -449,9 +509,11 @@ export default function OnboardingRequestsPage() {
                           <StatusIcon className="size-3 mr-1" />
                           {config.label}
                         </Badge>
-                        {isExpanded
-                          ? <ChevronUp className="size-4 text-muted-foreground" />
-                          : <ChevronDown className="size-4 text-muted-foreground" />}
+                        {isExpanded ? (
+                          <ChevronUp className="size-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="size-4 text-muted-foreground" />
+                        )}
                       </CardTitle>
                       <CardDescription className="text-xs mt-1">
                         {req.applicant_email}
@@ -466,7 +528,10 @@ export default function OnboardingRequestsPage() {
                             size="sm"
                             variant="default"
                             onClick={() => {
-                              setActionDialog({ type: "approve", request: req });
+                              setActionDialog({
+                                type: "approve",
+                                request: req,
+                              });
                               setActionNote("");
                               setActionRole("client");
                               setActionError(null);
@@ -500,12 +565,18 @@ export default function OnboardingRequestsPage() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                    <span>Submitted: {new Date(req.created_at).toLocaleDateString()}</span>
+                    <span>
+                      Submitted: {new Date(req.created_at).toLocaleDateString()}
+                    </span>
                     {req.selected_options.length > 0 && (
                       <span>
                         Options:{" "}
                         {req.selected_options.map((o) => (
-                          <Badge key={o} variant="outline" className="text-[10px] mx-0.5">
+                          <Badge
+                            key={o}
+                            variant="outline"
+                            className="text-[10px] mx-0.5"
+                          >
                             {o}
                           </Badge>
                         ))}
@@ -520,7 +591,13 @@ export default function OnboardingRequestsPage() {
         </div>
       )}
 
-      <Dialog open={!!actionDialog} onOpenChange={() => { setActionDialog(null); setActionError(null); }}>
+      <Dialog
+        open={!!actionDialog}
+        onOpenChange={() => {
+          setActionDialog(null);
+          setActionError(null);
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -537,7 +614,9 @@ export default function OnboardingRequestsPage() {
             <div className="rounded border bg-muted/30 p-3 space-y-1 text-sm">
               <div className="flex items-center gap-2">
                 <User className="size-3.5 text-muted-foreground" />
-                <span className="font-medium">{actionDialog.request.applicant_name}</span>
+                <span className="font-medium">
+                  {actionDialog.request.applicant_name}
+                </span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Mail className="size-3.5" />
@@ -556,7 +635,9 @@ export default function OnboardingRequestsPage() {
               {actionDialog.request.selected_options.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {actionDialog.request.selected_options.map((o) => (
-                    <Badge key={o} variant="secondary" className="text-xs">{o}</Badge>
+                    <Badge key={o} variant="secondary" className="text-xs">
+                      {o}
+                    </Badge>
                   ))}
                 </div>
               )}
@@ -580,7 +661,9 @@ export default function OnboardingRequestsPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Grant Application Access</Label>
+                  <Label className="text-sm font-medium">
+                    Grant Application Access
+                  </Label>
                   <div className="flex items-center gap-2">
                     {Object.values(selectedApps).some((v) => v.selected) && (
                       <Select onValueChange={setAllAppsRole}>
@@ -607,13 +690,19 @@ export default function OnboardingRequestsPage() {
                 </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-2">
                   {apps.map((app) => (
-                    <div key={app.app_id} className="flex items-center gap-3 py-1">
+                    <div
+                      key={app.app_id}
+                      className="flex items-center gap-3 py-1"
+                    >
                       <Checkbox
                         id={`umu-app-${app.app_id}`}
                         checked={selectedApps[app.app_id]?.selected || false}
                         onCheckedChange={() => toggleApp(app.app_id)}
                       />
-                      <label htmlFor={`umu-app-${app.app_id}`} className="flex-1 text-sm cursor-pointer">
+                      <label
+                        htmlFor={`umu-app-${app.app_id}`}
+                        className="flex-1 text-sm cursor-pointer"
+                      >
                         {app.name}
                       </label>
                       {selectedApps[app.app_id]?.selected && (
@@ -641,7 +730,9 @@ export default function OnboardingRequestsPage() {
             <label className="text-sm font-medium">Note (optional)</label>
             <Textarea
               value={actionNote}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setActionNote(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setActionNote(e.target.value)
+              }
               placeholder="Add a note..."
               rows={3}
             />
@@ -652,11 +743,19 @@ export default function OnboardingRequestsPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setActionDialog(null); setActionError(null); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setActionDialog(null);
+                setActionError(null);
+              }}
+            >
               Cancel
             </Button>
             <Button
-              variant={actionDialog?.type === "approve" ? "default" : "destructive"}
+              variant={
+                actionDialog?.type === "approve" ? "default" : "destructive"
+              }
               onClick={handleAction}
               disabled={actionInProgress}
             >

@@ -54,6 +54,17 @@ export async function reprovisionUser(id: string) {
   }>(`/users/${id}/reprovision`);
 }
 
+export async function issueWorkEmail(id: string, localPart?: string) {
+  return apiClient.post<{
+    upn: string;
+    created: boolean;
+    message: string;
+    user: Person;
+  }>(`/users/${id}/issue-work-email`, {
+    local_part: localPart,
+  });
+}
+
 export async function listUserWorkflowRuns(id: string) {
   return apiClient.get<{ runs: WorkflowRun[]; total: number }>(
     `/users/${id}/workflows`,

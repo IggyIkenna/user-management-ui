@@ -553,7 +553,7 @@ export default function AppDetailPage() {
                       <TableCell>{ent.role}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
-                          {(ent.environments ?? []).map((env) => (
+                          {ent.environments.map((env) => (
                             <Badge
                               key={env}
                               variant="secondary"

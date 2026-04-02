@@ -15,7 +15,11 @@ import {
   onIdTokenChanged,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase";
-import type { AuthUser, Entitlement, EffectiveAccessResult } from "@/lib/api/types";
+import type {
+  AuthUser,
+  Entitlement,
+  EffectiveAccessResult,
+} from "@/lib/api/types";
 import { apiClient } from "@/lib/api/client";
 
 const TOKEN_KEY = "session_token";
@@ -25,7 +29,10 @@ interface AuthState {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   hasEntitlement: (entitlement: Entitlement) => boolean;
   isAdmin: () => boolean;
@@ -119,33 +126,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
-      const freshToken = await cred.user.getIdToken();
-      localStorage.setItem(TOKEN_KEY, freshToken);
-      setToken(freshToken);
-      const profile = await fetchProfile(cred.user.uid);
-      if (profile) {
-        localStorage.setItem(USER_KEY, JSON.stringify(profile));
-        setUser(profile);
-        return { success: true };
+  const login = useCallback(
+    async (
+      email: string,
+      password: string,
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const cred = await signInWithEmailAndPassword(
+          firebaseAuth,
+          email,
+          password,
+        );
+        const freshToken = await cred.user.getIdToken();
+        localStorage.setItem(TOKEN_KEY, freshToken);
+        setToken(freshToken);
+        const profile = await fetchProfile(cred.user.uid);
+        if (profile) {
+          localStorage.setItem(USER_KEY, JSON.stringify(profile));
+          setUser(profile);
+          return { success: true };
+        }
+        return {
+          success: false,
+          error: "Failed to load user profile. Please try again.",
+        };
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code || "";
+        const FIREBASE_ERRORS: Record<string, string> = {
+          "auth/invalid-credential": "Invalid email or password.",
+          "auth/invalid-email": "Please enter a valid email address.",
+          "auth/user-disabled":
+            "This account has been disabled. Contact an administrator.",
+          "auth/user-not-found": "No account found with this email.",
+          "auth/wrong-password": "Incorrect password.",
+          "auth/too-many-requests":
+            "Too many failed attempts. Please wait a moment and try again.",
+          "auth/network-request-failed":
+            "Network error. Check your connection and try again.",
+        };
+        return {
+          success: false,
+          error:
+            FIREBASE_ERRORS[code] ||
+            `Login failed (${code || "unknown error"}).`,
+        };
       }
-      return { success: false, error: "Failed to load user profile. Please try again." };
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code || "";
-      const FIREBASE_ERRORS: Record<string, string> = {
-        "auth/invalid-credential": "Invalid email or password.",
-        "auth/invalid-email": "Please enter a valid email address.",
-        "auth/user-disabled": "This account has been disabled. Contact an administrator.",
-        "auth/user-not-found": "No account found with this email.",
-        "auth/wrong-password": "Incorrect password.",
-        "auth/too-many-requests": "Too many failed attempts. Please wait a moment and try again.",
-        "auth/network-request-failed": "Network error. Check your connection and try again.",
-      };
-      return { success: false, error: FIREBASE_ERRORS[code] || `Login failed (${code || "unknown error"}).` };
-    }
-  }, []);
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     await signOut(firebaseAuth);

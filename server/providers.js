@@ -63,6 +63,15 @@ function na(service, label, message) {
   };
 }
 
+function normalizeLocalPart(value, fallback) {
+  const candidate = String(value || fallback || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "");
+  if (!candidate) return "";
+  return candidate.replace(/^[._-]+|[._-]+$/g, "");
+}
+
 function buildAwsClientConfig(secrets) {
   const config = {
     region: process.env.AWS_REGION || "us-east-1",
@@ -309,6 +318,120 @@ async function getMicrosoftGraphToken(secrets) {
   if (!res.ok) return null;
   const data = await res.json();
   return data.access_token || null;
+}
+
+export async function issueMicrosoftWorkEmail(profile, options = {}) {
+  const secrets = await loadProviderSecrets();
+  const token = await getMicrosoftGraphToken(secrets);
+  if (!token) {
+    return {
+      ok: false,
+      status: 500,
+      error:
+        "Missing Microsoft Graph token. Set MS_TENANT_ID, MS_GRAPH_CLIENT_ID and MS_GRAPH_CLIENT_SECRET.",
+    };
+  }
+
+  const domain = String(
+    options.domain || process.env.MS_DEFAULT_DOMAIN || "odum-research.com",
+  )
+    .trim()
+    .toLowerCase();
+  const emailLocalPart =
+    String(profile.email || "").split("@")[0] || profile.firebase_uid;
+  const localPart = normalizeLocalPart(options.localPart, emailLocalPart);
+  if (!localPart) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Unable to derive a valid local part for work email.",
+    };
+  }
+
+  const upn = `${localPart}@${domain}`;
+  const graphBase =
+    process.env.MS_GRAPH_API_BASE_URL || "https://graph.microsoft.com/v1.0";
+  const encodedUpn = encodeURIComponent(upn);
+
+  const getRes = await fetch(`${graphBase}/users/${encodedUpn}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (getRes.ok) {
+    const patchRes = await fetch(`${graphBase}/users/${encodedUpn}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        accountEnabled: true,
+        displayName: profile.name,
+      }),
+    });
+    if (!patchRes.ok) {
+      return {
+        ok: false,
+        status: patchRes.status,
+        error: `Graph user update failed: ${await patchRes.text()}`,
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      upn,
+      created: false,
+      message: "Microsoft 365 account already existed; details refreshed.",
+    };
+  }
+
+  if (getRes.status !== 404) {
+    return {
+      ok: false,
+      status: getRes.status,
+      error: `Graph user lookup failed: ${await getRes.text()}`,
+    };
+  }
+
+  const payload = {
+    accountEnabled: true,
+    displayName: profile.name,
+    mailNickname: localPart,
+    userPrincipalName: upn,
+    passwordProfile: {
+      forceChangePasswordNextSignIn: true,
+      password: process.env.MS_TEMP_PASSWORD || "TempPass#2026!",
+    },
+  };
+
+  const createRes = await fetch(`${graphBase}/users`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!createRes.ok) {
+    return {
+      ok: false,
+      status: createRes.status,
+      error: `Graph user create failed: ${await createRes.text()}`,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 201,
+    upn,
+    created: true,
+    message: "Microsoft 365 account created.",
+  };
 }
 
 async function provisionM365(profile, secrets) {
