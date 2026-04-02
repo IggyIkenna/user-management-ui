@@ -15,7 +15,10 @@ export async function listRepos() {
   return apiClient.get<{ repos: GitHubRepo[]; total: number }>("/github/repos");
 }
 
-export async function listAssignments(params?: { uid?: string; repo?: string }) {
+export async function listAssignments(params?: {
+  uid?: string;
+  repo?: string;
+}) {
   return apiClient.get<{ assignments: GitHubRepoAssignment[]; total: number }>(
     "/github/assignments",
     { params },

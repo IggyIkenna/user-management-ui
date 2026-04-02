@@ -2,12 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  RefreshCw,
-  AppWindow,
-  ArrowRight,
-  Clock,
-} from "lucide-react";
+import { RefreshCw, AppWindow, ArrowRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -68,7 +63,9 @@ export default function AppsPage() {
   const [syncing, setSyncing] = React.useState(false);
   const [syncResult, setSyncResult] = React.useState<string | null>(null);
 
-  const [history, setHistory] = React.useState<ApplicationSyncHistoryEntry[]>([]);
+  const [history, setHistory] = React.useState<ApplicationSyncHistoryEntry[]>(
+    [],
+  );
   const [historyLoading, setHistoryLoading] = React.useState(false);
 
   const fetchApps = React.useCallback(async () => {
@@ -77,7 +74,9 @@ export default function AppsPage() {
       const res = await listApplications();
       setApps(res.data.applications ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load applications");
+      setError(
+        err instanceof Error ? err.message : "Failed to load applications",
+      );
     } finally {
       setLoading(false);
     }
@@ -120,7 +119,8 @@ export default function AppsPage() {
 
   const filtered = React.useMemo(() => {
     return apps.filter((a) => {
-      if (categoryFilter !== "all" && a.category !== categoryFilter) return false;
+      if (categoryFilter !== "all" && a.category !== categoryFilter)
+        return false;
       if (statusFilter !== "all" && a.status !== statusFilter) return false;
       return true;
     });
@@ -227,7 +227,11 @@ export default function AppsPage() {
                   <TableCell>
                     <div className="flex gap-1 flex-wrap">
                       {app.environments.map((env) => (
-                        <Badge key={env} variant="secondary" className="text-xs">
+                        <Badge
+                          key={env}
+                          variant="secondary"
+                          className="text-xs"
+                        >
                           {env}
                         </Badge>
                       ))}
@@ -237,7 +241,9 @@ export default function AppsPage() {
                     {app.owner_team}
                   </TableCell>
                   <TableCell>
-                    <Badge className={STATUS_STYLES[app.status]}>{app.status}</Badge>
+                    <Badge className={STATUS_STYLES[app.status]}>
+                      {app.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Link href={`/apps/${app.id}`}>
@@ -267,7 +273,9 @@ export default function AppsPage() {
         {historyLoading ? (
           <Spinner className="size-5" />
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No sync history available.</p>
+          <p className="text-sm text-muted-foreground">
+            No sync history available.
+          </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {history.slice(0, 6).map((h) => (
@@ -277,9 +285,13 @@ export default function AppsPage() {
                     {formatDateTime(h.synced_at)}
                   </p>
                   <div className="flex gap-3 text-sm">
-                    <span className="text-emerald-400">{h.created} created</span>
+                    <span className="text-emerald-400">
+                      {h.created} created
+                    </span>
                     <span className="text-primary">{h.updated} updated</span>
-                    <span className="text-muted-foreground">{h.skipped} skipped</span>
+                    <span className="text-muted-foreground">
+                      {h.skipped} skipped
+                    </span>
                   </div>
                   {h.errors.length > 0 && (
                     <p className="text-xs text-destructive mt-1">

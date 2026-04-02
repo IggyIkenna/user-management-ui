@@ -38,7 +38,11 @@ interface NavSection {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  items: { label: string; href: string; icon: React.ComponentType<{ className?: string }> }[];
+  items: {
+    label: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }[];
 }
 
 const NAV_SECTIONS: NavSection[] = [
@@ -84,8 +88,7 @@ export function AdminNav() {
 
   const currentSection = NAV_SECTIONS.find((s) =>
     s.items.some(
-      (item) =>
-        pathname === item.href || pathname.startsWith(item.href + "/"),
+      (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
     ),
   );
 
@@ -165,7 +168,10 @@ export function AdminNav() {
 
       <div className="flex items-center gap-2 shrink-0">
         {user && (
-          <Badge variant="outline" className="text-[10px] hidden sm:inline-flex">
+          <Badge
+            variant="outline"
+            className="text-[10px] hidden sm:inline-flex"
+          >
             {user.role}
           </Badge>
         )}

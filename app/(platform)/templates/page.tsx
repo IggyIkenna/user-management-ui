@@ -121,15 +121,21 @@ export default function TemplatesPage() {
   const [error, setError] = React.useState("");
 
   const [createForm, setCreateForm] = React.useState<FormFields>(EMPTY_FORM);
-  const [createErrors, setCreateErrors] = React.useState<Record<string, string>>({});
+  const [createErrors, setCreateErrors] = React.useState<
+    Record<string, string>
+  >({});
   const [creating, setCreating] = React.useState(false);
 
   const [editId, setEditId] = React.useState<string | null>(null);
   const [editForm, setEditForm] = React.useState<FormFields>(EMPTY_FORM);
-  const [editErrors, setEditErrors] = React.useState<Record<string, string>>({});
+  const [editErrors, setEditErrors] = React.useState<Record<string, string>>(
+    {},
+  );
   const [saving, setSaving] = React.useState(false);
 
-  const [deleteTarget, setDeleteTarget] = React.useState<AccessTemplate | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<AccessTemplate | null>(
+    null,
+  );
   const [deleting, setDeleting] = React.useState(false);
 
   const [cancelEditOpen, setCancelEditOpen] = React.useState(false);
@@ -231,7 +237,9 @@ export default function TemplatesPage() {
       setDeleteTarget(null);
       await fetchTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete template");
+      setError(
+        err instanceof Error ? err.message : "Failed to delete template",
+      );
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
@@ -285,7 +293,10 @@ export default function TemplatesPage() {
                   placeholder="Template description"
                   value={createForm.description}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, description: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      description: e.target.value,
+                    }))
                   }
                 />
               </div>
@@ -343,7 +354,11 @@ export default function TemplatesPage() {
               </p>
             )}
             <Button type="submit" disabled={creating} size="sm">
-              {creating ? <Spinner className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
+              {creating ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Plus className="mr-2 size-4" />
+              )}
               Create Template
             </Button>
           </form>
@@ -467,7 +482,11 @@ export default function TemplatesPage() {
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="size-8">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                          >
                             <MoreVertical className="size-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -490,7 +509,9 @@ export default function TemplatesPage() {
                   <CardContent className="space-y-3 text-sm">
                     {t.aws_permission_sets.length > 0 && (
                       <div>
-                        <p className="text-muted-foreground mb-1">AWS Permission Sets</p>
+                        <p className="text-muted-foreground mb-1">
+                          AWS Permission Sets
+                        </p>
                         <div className="flex flex-wrap gap-1">
                           {t.aws_permission_sets.map((s) => (
                             <Badge key={s} variant="outline">
@@ -502,7 +523,9 @@ export default function TemplatesPage() {
                     )}
                     {t.slack_channels.length > 0 && (
                       <div>
-                        <p className="text-muted-foreground mb-1">Slack Channels</p>
+                        <p className="text-muted-foreground mb-1">
+                          Slack Channels
+                        </p>
                         <div className="flex flex-wrap gap-1">
                           {t.slack_channels.map((c) => (
                             <Badge key={c} variant="secondary">
@@ -514,7 +537,9 @@ export default function TemplatesPage() {
                     )}
                     {t.github_teams.length > 0 && (
                       <div>
-                        <p className="text-muted-foreground mb-1">GitHub Teams</p>
+                        <p className="text-muted-foreground mb-1">
+                          GitHub Teams
+                        </p>
                         <div className="flex flex-wrap gap-1">
                           {t.github_teams.map((g) => (
                             <Badge key={g} variant="secondary">
@@ -526,7 +551,8 @@ export default function TemplatesPage() {
                     )}
                     {typeof t.assigned_user_count === "number" && (
                       <p className="text-muted-foreground">
-                        {t.assigned_user_count} user{t.assigned_user_count !== 1 ? "s" : ""} assigned
+                        {t.assigned_user_count} user
+                        {t.assigned_user_count !== 1 ? "s" : ""} assigned
                       </p>
                     )}
                   </CardContent>
@@ -562,8 +588,8 @@ export default function TemplatesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete template?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;. This
-              action cannot be undone.
+              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;.
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

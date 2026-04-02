@@ -45,7 +45,10 @@ export default function LoginPage() {
     if (result.success) {
       router.push(redirectTo || "/users");
     } else {
-      setError(result.error || "Invalid credentials. Please check your email and password.");
+      setError(
+        result.error ||
+          "Invalid credentials. Please check your email and password.",
+      );
     }
     setIsLoading(false);
   };

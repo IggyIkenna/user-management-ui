@@ -17,5 +17,6 @@ export const useUserFilters = create<UserFilterState>((set) => ({
   setSearch: (search) => set({ search }),
   setRoleFilter: (roleFilter) => set({ roleFilter }),
   setStatusFilter: (statusFilter) => set({ statusFilter }),
-  resetFilters: () => set({ search: "", roleFilter: "all", statusFilter: "all" }),
+  resetFilters: () =>
+    set({ search: "", roleFilter: "all", statusFilter: "all" }),
 }));

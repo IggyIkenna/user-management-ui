@@ -28,7 +28,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiClient } from "@/lib/api/client";
-import { Bell, Plus, Trash2, Loader2, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+  Bell,
+  Plus,
+  Trash2,
+  Loader2,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
 
 interface NotificationPreference {
   id: string;
@@ -59,9 +66,9 @@ export default function NotificationsPage() {
   const loadPrefs = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get<{ preferences: NotificationPreference[] }>(
-        "/notification-preferences",
-      );
+      const res = await apiClient.get<{
+        preferences: NotificationPreference[];
+      }>("/notification-preferences");
       setPrefs(res.data.preferences || []);
     } catch {
       setPrefs([]);

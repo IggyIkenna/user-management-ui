@@ -38,14 +38,18 @@ import { getAdminStats } from "@/lib/api/settings";
 import { formatDateTime } from "@/lib/utils";
 
 const ACTION_COLORS: Record<string, string> = {
-  "entitlement.granted": "bg-emerald-600/15 text-emerald-400 border-emerald-600/20",
+  "entitlement.granted":
+    "bg-emerald-600/15 text-emerald-400 border-emerald-600/20",
   "entitlement.updated": "bg-blue-600/15 text-blue-400 border-blue-600/20",
   "entitlement.revoked": "bg-red-600/15 text-red-400 border-red-600/20",
-  "entitlement.bulk_granted": "bg-amber-600/15 text-amber-400 border-amber-600/20",
+  "entitlement.bulk_granted":
+    "bg-amber-600/15 text-amber-400 border-amber-600/20",
   "group.member_added": "bg-purple-600/15 text-purple-400 border-purple-600/20",
-  "group.member_removed": "bg-orange-600/15 text-orange-400 border-orange-600/20",
+  "group.member_removed":
+    "bg-orange-600/15 text-orange-400 border-orange-600/20",
   "capabilities.updated": "bg-cyan-600/15 text-cyan-400 border-cyan-600/20",
-  "settings.password_changed": "bg-pink-600/15 text-pink-400 border-pink-600/20",
+  "settings.password_changed":
+    "bg-pink-600/15 text-pink-400 border-pink-600/20",
 };
 
 interface Stats {
@@ -87,7 +91,9 @@ export default function AdminPage() {
     {
       label: "Users",
       value: stats ? `${stats.users.active} active` : null,
-      sub: stats ? `${stats.users.disabled} disabled of ${stats.users.total}` : null,
+      sub: stats
+        ? `${stats.users.disabled} disabled of ${stats.users.total}`
+        : null,
       icon: Users,
       color: "text-primary",
       href: "/users",
@@ -162,7 +168,9 @@ export default function AdminPage() {
                 ) : (
                   <>
                     <p className="text-xl font-bold">{card.value ?? "---"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {card.sub}
+                    </p>
                   </>
                 )}
               </CardContent>
@@ -178,15 +186,15 @@ export default function AdminPage() {
               <FileText className="size-4 text-primary" />
               Recent Activity
             </CardTitle>
-            <CardDescription>
-              Last 10 access control changes
-            </CardDescription>
+            <CardDescription>Last 10 access control changes</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
               <Spinner className="size-5" />
             ) : !stats?.recent_audit.length ? (
-              <p className="text-sm text-muted-foreground">No recent audit events.</p>
+              <p className="text-sm text-muted-foreground">
+                No recent audit events.
+              </p>
             ) : (
               <div className="rounded-md border">
                 <Table>
@@ -202,7 +210,10 @@ export default function AdminPage() {
                       <TableRow key={entry.id}>
                         <TableCell>
                           <Badge
-                            className={ACTION_COLORS[entry.action] || "bg-muted text-muted-foreground"}
+                            className={
+                              ACTION_COLORS[entry.action] ||
+                              "bg-muted text-muted-foreground"
+                            }
                           >
                             {entry.action}
                           </Badge>
@@ -230,9 +241,7 @@ export default function AdminPage() {
                   <Activity className="size-4 text-primary" />
                   System Health
                 </CardTitle>
-                <CardDescription>
-                  Provider connectivity status
-                </CardDescription>
+                <CardDescription>Provider connectivity status</CardDescription>
               </div>
               <Link href="/health-checks">
                 <Button variant="outline" size="sm">

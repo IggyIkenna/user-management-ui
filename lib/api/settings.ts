@@ -1,10 +1,9 @@
 import { apiClient } from "@/lib/api/client";
 
 export async function updateProfile(uid: string, displayName: string) {
-  return apiClient.put<{ user: { firebase_uid: string; email: string; displayName: string } }>(
-    "/settings/profile",
-    { uid, displayName },
-  );
+  return apiClient.put<{
+    user: { firebase_uid: string; email: string; displayName: string };
+  }>("/settings/profile", { uid, displayName });
 }
 
 export async function changePassword(uid: string, newPassword: string) {
@@ -32,8 +31,9 @@ export async function getAdminStats() {
 }
 
 export async function sendWelcomeEmail(email: string) {
-  return apiClient.post<{ success: boolean; message: string; reset_link: string }>(
-    "/notifications/welcome",
-    { email },
-  );
+  return apiClient.post<{
+    success: boolean;
+    message: string;
+    reset_link: string;
+  }>("/notifications/welcome", { email });
 }

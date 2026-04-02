@@ -39,10 +39,7 @@ test.describe("user lifecycle smoke", () => {
         });
       }
 
-      if (
-        method === "GET" &&
-        /^\/api\/v1\/users\/[^/]+$/.test(path)
-      ) {
+      if (method === "GET" && /^\/api\/v1\/users\/[^/]+$/.test(path)) {
         const id = path.split("/").pop() as string;
         const user = users.find((u) => u.id === id);
         return route.fulfill({
@@ -99,7 +96,11 @@ test.describe("user lifecycle smoke", () => {
           body: JSON.stringify({
             user,
             provisioning_steps: [
-              { service: "firebase", label: "Firebase Auth", status: "success" },
+              {
+                service: "firebase",
+                label: "Firebase Auth",
+                status: "success",
+              },
             ],
           }),
         });
@@ -107,11 +108,16 @@ test.describe("user lifecycle smoke", () => {
 
       if (method === "POST" && path.endsWith("/offboard")) {
         const id = path.split("/")[4];
-        users = users.map((u) => (u.id === id ? { ...u, status: "offboarded" } : u));
+        users = users.map((u) =>
+          u.id === id ? { ...u, status: "offboarded" } : u,
+        );
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ user: users.find((u) => u.id === id), revocation_steps: [] }),
+          body: JSON.stringify({
+            user: users.find((u) => u.id === id),
+            revocation_steps: [],
+          }),
         });
       }
 
@@ -162,7 +168,9 @@ test.describe("user lifecycle smoke", () => {
   test("onboard flow", async ({ page }) => {
     await page.goto("/onboard");
     await page.getByPlaceholder("John Doe").fill("Smoke User");
-    await page.getByPlaceholder("john@odum-research.com").fill("smoke-user@test.com");
+    await page
+      .getByPlaceholder("john@odum-research.com")
+      .fill("smoke-user@test.com");
     await page.getByLabel("Role").click();
     await page.getByRole("option", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Onboard User" }).click();

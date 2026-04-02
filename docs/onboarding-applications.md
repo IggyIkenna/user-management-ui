@@ -56,41 +56,41 @@ NEXT_PUBLIC_USER_MGMT_API_URL=https://user-management-api-cldtjniqvq-uc.a.run.ap
 Copy these files from `unified-trading-system-ui` into the target app, adjusting
 the `APP_ID` constant in `authorize-client.ts`:
 
-| Source file | Purpose |
-|---|---|
-| `lib/auth/types.ts` | AuthProvider interface + AuthUser type |
-| `lib/auth/firebase-config.ts` | Firebase app singleton |
-| `lib/auth/firebase-provider.ts` | Firebase Auth provider |
-| `lib/auth/authorize-client.ts` | Calls `/api/v1/authorize` (change `APP_ID`) |
-| `lib/auth/get-provider.ts` | Provider factory |
-| `hooks/use-auth.tsx` | Auth identity hook |
-| `hooks/use-app-access.tsx` | Authorization/capability hook |
-| `components/shell/capability-gate.tsx` | Inline capability guard |
-| `components/shell/require-capability.tsx` | Route-level capability guard |
-| `components/shell/access-denied.tsx` | Access denied page |
+| Source file                               | Purpose                                     |
+| ----------------------------------------- | ------------------------------------------- |
+| `lib/auth/types.ts`                       | AuthProvider interface + AuthUser type      |
+| `lib/auth/firebase-config.ts`             | Firebase app singleton                      |
+| `lib/auth/firebase-provider.ts`           | Firebase Auth provider                      |
+| `lib/auth/authorize-client.ts`            | Calls `/api/v1/authorize` (change `APP_ID`) |
+| `lib/auth/get-provider.ts`                | Provider factory                            |
+| `hooks/use-auth.tsx`                      | Auth identity hook                          |
+| `hooks/use-app-access.tsx`                | Authorization/capability hook               |
+| `components/shell/capability-gate.tsx`    | Inline capability guard                     |
+| `components/shell/require-capability.tsx` | Route-level capability guard                |
+| `components/shell/access-denied.tsx`      | Access denied page                          |
 
 ### 5. Wire providers
 
 In your root providers file:
 
 ```tsx
-import { AuthProvider } from "@/hooks/use-auth"
-import { AppAccessProvider } from "@/hooks/use-app-access"
+import { AuthProvider } from "@/hooks/use-auth";
+import { AppAccessProvider } from "@/hooks/use-app-access";
 
 export function Providers({ children }) {
   return (
     <AuthProvider>
       <AppAccessProvider>{children}</AppAccessProvider>
     </AuthProvider>
-  )
+  );
 }
 ```
 
 ### 6. Use guards in pages
 
 ```tsx
-import { RequireCapability } from "@/components/shell/require-capability"
-import { CapabilityGate } from "@/components/shell/capability-gate"
+import { RequireCapability } from "@/components/shell/require-capability";
+import { CapabilityGate } from "@/components/shell/capability-gate";
 
 export default function TradingPage() {
   return (
@@ -100,7 +100,7 @@ export default function TradingPage() {
         <PlaceOrderButton />
       </CapabilityGate>
     </RequireCapability>
-  )
+  );
 }
 ```
 
@@ -113,13 +113,13 @@ export default function TradingPage() {
 
 ## Rollout Order (Recommended)
 
-| Phase | Apps | Status |
-|---|---|---|
-| Pilot | unified-trading-system-ui, deployment-ui, strategy-ui | In progress |
-| Wave 2 | execution-analytics-ui, trading-analytics-ui, ml-training-ui | Planned |
-| Wave 3 | settlement-ui, client-reporting-ui, live-health-monitor-ui | Planned |
-| Wave 4 | batch-audit-ui, logs-dashboard-ui, onboarding-ui, unified-admin-ui | Planned |
-| Wave 5 | All remaining apps + APIs | Planned |
+| Phase  | Apps                                                               | Status      |
+| ------ | ------------------------------------------------------------------ | ----------- |
+| Pilot  | unified-trading-system-ui, deployment-ui, strategy-ui              | In progress |
+| Wave 2 | execution-analytics-ui, trading-analytics-ui, ml-training-ui       | Planned     |
+| Wave 3 | settlement-ui, client-reporting-ui, live-health-monitor-ui         | Planned     |
+| Wave 4 | batch-audit-ui, logs-dashboard-ui, onboarding-ui, unified-admin-ui | Planned     |
+| Wave 5 | All remaining apps + APIs                                          | Planned     |
 
 ## Architecture
 

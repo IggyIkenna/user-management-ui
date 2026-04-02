@@ -1,20 +1,9 @@
 "use client";
 
 import * as React from "react";
-import {
-  Activity,
-  CheckCircle2,
-  XCircle,
-  Play,
-  Clock,
-} from "lucide-react";
+import { Activity, CheckCircle2, XCircle, Play, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -71,7 +60,9 @@ export default function HealthChecksPage() {
       setResult(res.data);
       await fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run health checks");
+      setError(
+        err instanceof Error ? err.message : "Failed to run health checks",
+      );
     } finally {
       setRunning(false);
     }
@@ -107,7 +98,11 @@ export default function HealthChecksPage() {
           <p className="text-sm text-muted-foreground">{check.message}</p>
           {Boolean(check.details) && (
             <pre className="mt-2 rounded-md bg-muted p-2 text-xs overflow-auto max-h-32">
-              {JSON.stringify(check.details as Record<string, unknown>, null, 2)}
+              {JSON.stringify(
+                check.details as Record<string, unknown>,
+                null,
+                2,
+              )}
             </pre>
           )}
         </CardContent>
@@ -225,7 +220,8 @@ export default function HealthChecksPage() {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {run.checks.filter((c) => c.ok).length}/{run.checks.length} providers healthy
+                    {run.checks.filter((c) => c.ok).length}/{run.checks.length}{" "}
+                    providers healthy
                   </p>
                 </CardContent>
               </Card>

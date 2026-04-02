@@ -69,11 +69,7 @@ import {
 } from "@/lib/api/groups";
 import { listFirebaseUsers } from "@/lib/api/firebase-auth";
 import { listApplications } from "@/lib/api/applications";
-import type {
-  UserGroup,
-  FirebaseAuthUser,
-  Application,
-} from "@/lib/api/types";
+import type { UserGroup, FirebaseAuthUser, Application } from "@/lib/api/types";
 
 export default function GroupsPage() {
   const [groups, setGroups] = React.useState<UserGroup[]>([]);
@@ -87,8 +83,12 @@ export default function GroupsPage() {
   const [newDesc, setNewDesc] = React.useState("");
   const [creating, setCreating] = React.useState(false);
 
-  const [addMemberGroupId, setAddMemberGroupId] = React.useState<string | null>(null);
-  const [firebaseUsers, setFirebaseUsers] = React.useState<FirebaseAuthUser[]>([]);
+  const [addMemberGroupId, setAddMemberGroupId] = React.useState<string | null>(
+    null,
+  );
+  const [firebaseUsers, setFirebaseUsers] = React.useState<FirebaseAuthUser[]>(
+    [],
+  );
   const [fbLoading, setFbLoading] = React.useState(false);
   const [selectedUid, setSelectedUid] = React.useState("");
   const [addingMember, setAddingMember] = React.useState(false);
@@ -100,7 +100,9 @@ export default function GroupsPage() {
   } | null>(null);
   const [removingMember, setRemovingMember] = React.useState(false);
 
-  const [deleteTarget, setDeleteTarget] = React.useState<UserGroup | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<UserGroup | null>(
+    null,
+  );
   const [deletingGroup, setDeletingGroup] = React.useState(false);
 
   const [bulkGroupId, setBulkGroupId] = React.useState<string | null>(null);
@@ -355,7 +357,8 @@ export default function GroupsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">
-                        {g.members.length} member{g.members.length !== 1 ? "s" : ""}
+                        {g.members.length} member
+                        {g.members.length !== 1 ? "s" : ""}
                       </Badge>
                       <Button
                         variant="outline"
@@ -483,7 +486,10 @@ export default function GroupsPage() {
             )}
           </div>
           <DialogFooter>
-            <Button onClick={handleAddMember} disabled={addingMember || !selectedUid}>
+            <Button
+              onClick={handleAddMember}
+              disabled={addingMember || !selectedUid}
+            >
               {addingMember ? "Adding…" : "Add Member"}
             </Button>
           </DialogFooter>
@@ -521,7 +527,10 @@ export default function GroupsPage() {
               <Label>Environments</Label>
               <div className="flex gap-4">
                 {ENV_OPTIONS.map((env) => (
-                  <label key={env} className="flex items-center gap-1.5 text-sm">
+                  <label
+                    key={env}
+                    className="flex items-center gap-1.5 text-sm"
+                  >
                     <Checkbox
                       checked={bulkEnvs.includes(env)}
                       onCheckedChange={() => toggleEnv(env)}
@@ -558,9 +567,15 @@ export default function GroupsPage() {
           <DialogFooter>
             <Button
               onClick={handleBulkAssign}
-              disabled={bulkAssigning || selectedApps.length === 0 || bulkEnvs.length === 0}
+              disabled={
+                bulkAssigning ||
+                selectedApps.length === 0 ||
+                bulkEnvs.length === 0
+              }
             >
-              {bulkAssigning ? "Assigning…" : `Assign to ${selectedApps.length} app(s)`}
+              {bulkAssigning
+                ? "Assigning…"
+                : `Assign to ${selectedApps.length} app(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -575,12 +590,14 @@ export default function GroupsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove member?</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove &ldquo;{removeMember?.name}&rdquo; from this group? They will
-              lose access granted through group membership.
+              Remove &ldquo;{removeMember?.name}&rdquo; from this group? They
+              will lose access granted through group membership.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={removingMember}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={removingMember}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRemoveMember}
               disabled={removingMember}
@@ -601,12 +618,14 @@ export default function GroupsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete group?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo; and
-              remove all member associations.
+              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;
+              and remove all member associations.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingGroup}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingGroup}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteGroup}
               disabled={deletingGroup}

@@ -1,11 +1,10 @@
 import { apiClient } from "@/lib/api/client";
-import type {
-  AppEntitlement,
-  GrantEntitlementRequest,
-} from "@/lib/api/types";
+import type { AppEntitlement, GrantEntitlementRequest } from "@/lib/api/types";
 
 export async function listEntitlements(appId: string) {
-  return apiClient.get<{ entitlements: AppEntitlement[] }>(`/apps/${appId}/entitlements`);
+  return apiClient.get<{ entitlements: AppEntitlement[] }>(
+    `/apps/${appId}/entitlements`,
+  );
 }
 
 export async function grantEntitlement(data: GrantEntitlementRequest) {

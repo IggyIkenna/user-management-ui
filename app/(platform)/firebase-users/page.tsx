@@ -39,7 +39,9 @@ export default function FirebaseUsersPage() {
         const res = await listFirebaseUsers();
         setUsers(res.data.users);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load Firebase users");
+        setError(
+          err instanceof Error ? err.message : "Failed to load Firebase users",
+        );
       } finally {
         setLoading(false);
       }

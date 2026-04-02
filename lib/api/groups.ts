@@ -28,7 +28,10 @@ export async function addGroupMember(
   groupId: string,
   member: { firebase_uid: string; name: string; email: string },
 ) {
-  return apiClient.post<{ group: UserGroup }>(`/groups/${groupId}/members`, member);
+  return apiClient.post<{ group: UserGroup }>(
+    `/groups/${groupId}/members`,
+    member,
+  );
 }
 
 export async function removeGroupMember(groupId: string, firebaseUid: string) {
@@ -41,5 +44,8 @@ export async function bulkAssignGroupToApps(
   groupId: string,
   data: { app_ids: string[]; role: string; environments: string[] },
 ) {
-  return apiClient.post<BulkAssignResult>(`/groups/${groupId}/bulk-assign`, data);
+  return apiClient.post<BulkAssignResult>(
+    `/groups/${groupId}/bulk-assign`,
+    data,
+  );
 }
