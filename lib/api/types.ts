@@ -277,6 +277,23 @@ export interface EffectiveAccessResult {
   total_apps: number;
 }
 
+export type Microsoft365LicenseKey =
+  | "power_automate"
+  | "exchange_online"
+  | "microsoft_365_business_premium";
+
+export interface Microsoft365LicenseItem {
+  key: Microsoft365LicenseKey;
+  label: string;
+  available: boolean;
+  assigned: boolean;
+  skuPartNumber: string | null;
+  skuId: string | null;
+  totalSeats: number | null;
+  consumedSeats: number | null;
+  remainingSeats: number | null;
+}
+
 export interface AuditLogEntry {
   id: string;
   action: string;

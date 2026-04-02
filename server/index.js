@@ -23,7 +23,10 @@ for (const envFile of [".env.development", ".env.local", ".env"]) {
   }
 }
 import {
+  getMicrosoft365LicenseState,
   issueMicrosoftWorkEmail,
+  setMicrosoft365AccountAction,
+  updateMicrosoft365Licenses,
   runProviderDeprovisioning,
   runProviderHealthChecks,
   runProviderProvisioning,
@@ -1229,10 +1232,13 @@ app.post("/api/v1/users/:id/offboard", async (req, res) => {
       },
     ];
     if (realProviderExecutionEnabled) {
-      const providerSteps = await runProviderDeprovisioning({
-        ...profile,
-        firebase_uid: id,
-      });
+      const providerSteps = await runProviderDeprovisioning(
+        {
+          ...profile,
+          firebase_uid: id,
+        },
+        actions,
+      );
       revocationSteps = [...revocationSteps, ...providerSteps];
       const servicePatch = {};
       const serviceMessages = {};
@@ -1462,6 +1468,186 @@ app.post("/api/v1/users/:id/issue-work-email", async (req, res) => {
       created: Boolean(result.created),
       message: result.message,
       user: { firebase_uid: id, ...(updated.data() || {}) },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get("/api/v1/users/:id/microsoft365/licenses", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor || !(await isPlatformAdmin(actor.uid))) {
+      return res
+        .status(403)
+        .json({ error: "Only platform admins can manage Microsoft 365 licenses." });
+    }
+    const id = await resolveUserUid(req.params.id);
+    const profileRef = usersCollection().doc(id);
+    const snapshot = await profileRef.get();
+    if (!snapshot.exists) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+    const profile = snapshot.data() || {};
+    const result = await getMicrosoft365LicenseState({
+      ...profile,
+      firebase_uid: id,
+    });
+    if (!result.ok) {
+      return res
+        .status(result.status || 500)
+        .json({ error: result.error || "Failed to fetch Microsoft 365 licenses." });
+    }
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/users/:id/microsoft365/account-action", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor || !(await isPlatformAdmin(actor.uid))) {
+      return res
+        .status(403)
+        .json({ error: "Only platform admins can manage Microsoft 365 accounts." });
+    }
+    const id = await resolveUserUid(req.params.id);
+    const profileRef = usersCollection().doc(id);
+    const snapshot = await profileRef.get();
+    if (!snapshot.exists) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+    const profile = snapshot.data() || {};
+    const action = String(req.body?.action || "").toLowerCase();
+    const result = await setMicrosoft365AccountAction(
+      { ...profile, firebase_uid: id },
+      action,
+    );
+    if (!result.ok) {
+      return res
+        .status(result.status || 500)
+        .json({ error: result.error || "Failed to update Microsoft 365 account." });
+    }
+
+    const now = new Date().toISOString();
+    const nextServiceStatus =
+      action === "delete" || action === "deactivate" ? "not_applicable" : "provisioned";
+    await profileRef.set(
+      {
+        services: {
+          ...(profile.services || {}),
+          microsoft365: nextServiceStatus,
+        },
+        service_messages: {
+          ...(profile.service_messages || {}),
+          microsoft365: result.message || "Microsoft 365 account updated.",
+        },
+        service_synced_at: {
+          ...(profile.service_synced_at || {}),
+          microsoft365: now,
+        },
+        last_modified: now,
+      },
+      { merge: true },
+    );
+
+    await writeAuditEntry({
+      action: `microsoft365.account_${action}`,
+      actor: actor.uid,
+      firebase_uid: id,
+      message: result.message,
+      microsoft_user_id: result.user_id || null,
+      microsoft_upn: result.upn || null,
+    });
+
+    const updated = await profileRef.get();
+    return res.json({
+      action,
+      message: result.message,
+      user: { firebase_uid: id, ...(updated.data() || {}) },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post("/api/v1/users/:id/microsoft365/licenses/:operation", async (req, res) => {
+  try {
+    const actor = await getActorFromRequest(req);
+    if (!actor || !(await isPlatformAdmin(actor.uid))) {
+      return res
+        .status(403)
+        .json({ error: "Only platform admins can manage Microsoft 365 licenses." });
+    }
+    const operation = String(req.params.operation || "").toLowerCase();
+    if (!["assign", "unassign"].includes(operation)) {
+      return res.status(400).json({ error: "operation must be assign or unassign." });
+    }
+    const requestedLicenses = Array.isArray(req.body?.licenses)
+      ? req.body.licenses
+      : [];
+    if (requestedLicenses.length === 0) {
+      return res.status(400).json({ error: "licenses array is required." });
+    }
+
+    const id = await resolveUserUid(req.params.id);
+    const profileRef = usersCollection().doc(id);
+    const snapshot = await profileRef.get();
+    if (!snapshot.exists) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+    const profile = snapshot.data() || {};
+    const result = await updateMicrosoft365Licenses(
+      { ...profile, firebase_uid: id },
+      operation,
+      requestedLicenses,
+    );
+    if (!result.ok) {
+      return res
+        .status(result.status || 500)
+        .json({ error: result.error || "Failed to update Microsoft 365 licenses." });
+    }
+
+    const now = new Date().toISOString();
+    await profileRef.set(
+      {
+        services: {
+          ...(profile.services || {}),
+          microsoft365: "provisioned",
+        },
+        service_messages: {
+          ...(profile.service_messages || {}),
+          microsoft365: result.message || "Microsoft 365 licenses updated.",
+        },
+        service_synced_at: {
+          ...(profile.service_synced_at || {}),
+          microsoft365: now,
+        },
+        last_modified: now,
+      },
+      { merge: true },
+    );
+
+    await writeAuditEntry({
+      action: `microsoft365.licenses_${operation}`,
+      actor: actor.uid,
+      firebase_uid: id,
+      licenses: requestedLicenses,
+      message: result.message,
+      changed: result.changed || [],
+    });
+
+    const state = await getMicrosoft365LicenseState({
+      ...profile,
+      firebase_uid: id,
+    });
+    return res.json({
+      operation,
+      message: result.message,
+      changed: result.changed || [],
+      licenses:
+        state.ok && Array.isArray(state.licenses) ? state.licenses : [],
     });
   } catch (error) {
     return res.status(500).json({ error: String(error) });

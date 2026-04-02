@@ -9,6 +9,8 @@ import type {
   WorkflowExecution,
   WorkflowRun,
   EffectiveAccessResult,
+  Microsoft365LicenseItem,
+  Microsoft365LicenseKey,
 } from "@/lib/api/types";
 
 export async function listUsers() {
@@ -62,6 +64,68 @@ export async function issueWorkEmail(id: string, localPart?: string) {
     user: Person;
   }>(`/users/${id}/issue-work-email`, {
     local_part: localPart,
+  });
+}
+
+export async function getMicrosoft365Licenses(id: string) {
+  return apiClient.get<{
+    licenses: Microsoft365LicenseItem[];
+    user?: {
+      id: string;
+      userPrincipalName: string;
+      accountEnabled: boolean;
+    };
+  }>(`/users/${id}/microsoft365/licenses`);
+}
+
+export async function updateMicrosoft365AccountAction(
+  id: string,
+  action: "activate" | "deactivate" | "delete",
+) {
+  return apiClient.post<{
+    action: string;
+    message: string;
+    user: Person;
+  }>(`/users/${id}/microsoft365/account-action`, {
+    action,
+  });
+}
+
+export async function assignMicrosoft365Licenses(
+  id: string,
+  licenses: Microsoft365LicenseKey[],
+) {
+  return apiClient.post<{
+    operation: "assign";
+    message: string;
+    changed: Array<{
+      key: Microsoft365LicenseKey;
+      label: string;
+      skuPartNumber: string;
+      skuId: string;
+    }>;
+    licenses: Microsoft365LicenseItem[];
+  }>(`/users/${id}/microsoft365/licenses/assign`, {
+    licenses,
+  });
+}
+
+export async function unassignMicrosoft365Licenses(
+  id: string,
+  licenses: Microsoft365LicenseKey[],
+) {
+  return apiClient.post<{
+    operation: "unassign";
+    message: string;
+    changed: Array<{
+      key: Microsoft365LicenseKey;
+      label: string;
+      skuPartNumber: string;
+      skuId: string;
+    }>;
+    licenses: Microsoft365LicenseItem[];
+  }>(`/users/${id}/microsoft365/licenses/unassign`, {
+    licenses,
   });
 }
 

@@ -105,6 +105,386 @@ async function resolveGcpProjectId() {
   }
 }
 
+const MS_GRAPH_BASE_URL =
+  process.env.MS_GRAPH_API_BASE_URL || "https://graph.microsoft.com/v1.0";
+
+const MS_LICENSE_CATALOG = {
+  power_automate: {
+    label: "Power Automate",
+    candidates: [
+      "POWER_AUTOMATE_PREMIUM",
+      "POWER_AUTOMATE_ATTENDED_RPA",
+      "POWER_AUTOMATE_PER_USER",
+      "FLOW_PER_USER",
+      "FLOW_FREE",
+    ],
+  },
+  exchange_online: {
+    label: "Exchange Online",
+    candidates: ["EXCHANGESTANDARD", "EXCHANGE_S_STANDARD", "EXCHANGEENTERPRISE"],
+  },
+  microsoft_365_business_premium: {
+    label: "Microsoft 365 Business Premium",
+    candidates: ["SPB", "O365_BUSINESS_PREMIUM"],
+  },
+};
+
+function normalizeLicenseKeys(licenseKeys) {
+  return Array.from(
+    new Set(
+      (Array.isArray(licenseKeys) ? licenseKeys : [])
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ).filter((key) => key in MS_LICENSE_CATALOG);
+}
+
+function escapeOdataString(value) {
+  return String(value || "").replaceAll("'", "''");
+}
+
+async function graphRequest(token, path, options = {}) {
+  const res = await fetch(`${MS_GRAPH_BASE_URL}${path}`, {
+    method: options.method || "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  return res;
+}
+
+async function resolveMicrosoftGraphUser(profile, token) {
+  const identifier = String(profile.microsoft_upn || profile.email || "").trim();
+  if (!identifier) return null;
+
+  const byIdentifier = await graphRequest(
+    token,
+    `/users/${encodeURIComponent(identifier)}?$select=id,userPrincipalName,displayName,accountEnabled`,
+  );
+  if (byIdentifier.ok) {
+    return await byIdentifier.json();
+  }
+  if (byIdentifier.status !== 404) {
+    throw new Error(`Graph user lookup failed: ${await byIdentifier.text()}`);
+  }
+
+  const safeEmail = escapeOdataString(profile.email || "");
+  if (!safeEmail) return null;
+  const byMail = await graphRequest(
+    token,
+    `/users?$filter=mail eq '${safeEmail}'&$select=id,userPrincipalName,displayName,accountEnabled&$top=1`,
+  );
+  if (!byMail.ok) {
+    throw new Error(`Graph user mail lookup failed: ${await byMail.text()}`);
+  }
+  const mailBody = await byMail.json();
+  return Array.isArray(mailBody.value) && mailBody.value.length > 0
+    ? mailBody.value[0]
+    : null;
+}
+
+async function getSubscribedSkus(token) {
+  const res = await graphRequest(
+    token,
+    "/subscribedSkus?$select=skuId,skuPartNumber,prepaidUnits,consumedUnits",
+  );
+  if (!res.ok) {
+    throw new Error(`Graph subscribedSkus failed: ${await res.text()}`);
+  }
+  const body = await res.json();
+  return Array.isArray(body.value) ? body.value : [];
+}
+
+function resolveTargetSkus(subscribedSkus, licenseKeys) {
+  const partToSku = new Map(
+    subscribedSkus.map((sku) => [String(sku.skuPartNumber || "").toUpperCase(), sku]),
+  );
+  return normalizeLicenseKeys(licenseKeys).map((key) => {
+    const catalog = MS_LICENSE_CATALOG[key];
+    const matched = catalog.candidates
+      .map((part) => partToSku.get(part.toUpperCase()))
+      .find(Boolean);
+    return {
+      key,
+      label: catalog.label,
+      sku: matched || null,
+    };
+  });
+}
+
+async function getUserAssignedLicenses(token, userId) {
+  const res = await graphRequest(
+    token,
+    `/users/${encodeURIComponent(userId)}/licenseDetails?$select=skuId,skuPartNumber`,
+  );
+  if (!res.ok) {
+    throw new Error(`Graph licenseDetails failed: ${await res.text()}`);
+  }
+  const body = await res.json();
+  return Array.isArray(body.value) ? body.value : [];
+}
+
+export async function setMicrosoft365AccountAction(profile, action = "deactivate") {
+  const normalizedAction = String(action || "deactivate").toLowerCase();
+  if (!["deactivate", "activate", "delete"].includes(normalizedAction)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Unsupported Microsoft 365 action: ${action}`,
+    };
+  }
+  const secrets = await loadProviderSecrets();
+  const token = await getMicrosoftGraphToken(secrets);
+  if (!token) {
+    return {
+      ok: false,
+      status: 500,
+      error:
+        "Missing Microsoft Graph token. Set MS_TENANT_ID, MS_GRAPH_CLIENT_ID and MS_GRAPH_CLIENT_SECRET.",
+    };
+  }
+  const graphUser = await resolveMicrosoftGraphUser(profile, token);
+  if (!graphUser) {
+    return {
+      ok: false,
+      status: 404,
+      error: "Microsoft 365 user not found.",
+    };
+  }
+
+  if (normalizedAction === "delete") {
+    const deleteRes = await graphRequest(
+      token,
+      `/users/${encodeURIComponent(graphUser.id)}`,
+      { method: "DELETE" },
+    );
+    if (!deleteRes.ok && deleteRes.status !== 404) {
+      return {
+        ok: false,
+        status: deleteRes.status,
+        error: `Graph user delete failed: ${await deleteRes.text()}`,
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      action: "delete",
+      user_id: graphUser.id,
+      upn: graphUser.userPrincipalName,
+      message: "Microsoft 365 account deleted.",
+    };
+  }
+
+  const shouldEnable = normalizedAction === "activate";
+  const patchRes = await graphRequest(
+    token,
+    `/users/${encodeURIComponent(graphUser.id)}`,
+    {
+      method: "PATCH",
+      body: { accountEnabled: shouldEnable },
+    },
+  );
+  if (!patchRes.ok) {
+    return {
+      ok: false,
+      status: patchRes.status,
+      error: `Graph account update failed: ${await patchRes.text()}`,
+    };
+  }
+  return {
+    ok: true,
+    status: 200,
+    action: normalizedAction,
+    user_id: graphUser.id,
+    upn: graphUser.userPrincipalName,
+    message: `Microsoft 365 account ${shouldEnable ? "activated" : "deactivated"}.`,
+  };
+}
+
+export async function getMicrosoft365LicenseState(profile) {
+  const secrets = await loadProviderSecrets();
+  const token = await getMicrosoftGraphToken(secrets);
+  if (!token) {
+    return {
+      ok: false,
+      status: 500,
+      error:
+        "Missing Microsoft Graph token. Set MS_TENANT_ID, MS_GRAPH_CLIENT_ID and MS_GRAPH_CLIENT_SECRET.",
+    };
+  }
+  const graphUser = await resolveMicrosoftGraphUser(profile, token);
+  if (!graphUser) {
+    return {
+      ok: false,
+      status: 404,
+      error: "Microsoft 365 user not found.",
+    };
+  }
+
+  const [subscribedSkus, assignedLicenses] = await Promise.all([
+    getSubscribedSkus(token),
+    getUserAssignedLicenses(token, graphUser.id),
+  ]);
+  const assignedSkuIds = new Set(
+    assignedLicenses.map((item) => String(item.skuId || "").toLowerCase()),
+  );
+  const resolved = resolveTargetSkus(subscribedSkus, Object.keys(MS_LICENSE_CATALOG));
+  return {
+    ok: true,
+    status: 200,
+    user: {
+      id: graphUser.id,
+      userPrincipalName: graphUser.userPrincipalName,
+      accountEnabled: Boolean(graphUser.accountEnabled),
+    },
+    licenses: resolved.map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      available: Boolean(entry.sku),
+      assigned: Boolean(
+        entry.sku && assignedSkuIds.has(String(entry.sku.skuId || "").toLowerCase()),
+      ),
+      skuPartNumber: entry.sku?.skuPartNumber || null,
+      skuId: entry.sku?.skuId || null,
+      totalSeats:
+        typeof entry.sku?.prepaidUnits?.enabled === "number"
+          ? entry.sku.prepaidUnits.enabled
+          : null,
+      consumedSeats:
+        typeof entry.sku?.consumedUnits === "number"
+          ? entry.sku.consumedUnits
+          : null,
+      remainingSeats:
+        typeof entry.sku?.prepaidUnits?.enabled === "number" &&
+        typeof entry.sku?.consumedUnits === "number"
+          ? Math.max(entry.sku.prepaidUnits.enabled - entry.sku.consumedUnits, 0)
+          : null,
+    })),
+  };
+}
+
+export async function updateMicrosoft365Licenses(
+  profile,
+  operation,
+  licenseKeys,
+) {
+  const normalizedOperation = String(operation || "").toLowerCase();
+  if (!["assign", "unassign"].includes(normalizedOperation)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Unsupported license operation: ${operation}`,
+    };
+  }
+  const normalizedKeys = normalizeLicenseKeys(licenseKeys);
+  if (normalizedKeys.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "At least one supported license key is required.",
+    };
+  }
+
+  const secrets = await loadProviderSecrets();
+  const token = await getMicrosoftGraphToken(secrets);
+  if (!token) {
+    return {
+      ok: false,
+      status: 500,
+      error:
+        "Missing Microsoft Graph token. Set MS_TENANT_ID, MS_GRAPH_CLIENT_ID and MS_GRAPH_CLIENT_SECRET.",
+    };
+  }
+  const graphUser = await resolveMicrosoftGraphUser(profile, token);
+  if (!graphUser) {
+    return {
+      ok: false,
+      status: 404,
+      error: "Microsoft 365 user not found.",
+    };
+  }
+
+  const [subscribedSkus, assignedLicenses] = await Promise.all([
+    getSubscribedSkus(token),
+    getUserAssignedLicenses(token, graphUser.id),
+  ]);
+  const assignedSkuIds = new Set(
+    assignedLicenses.map((item) => String(item.skuId || "").toLowerCase()),
+  );
+  const resolved = resolveTargetSkus(subscribedSkus, normalizedKeys);
+
+  const missing = resolved.filter((entry) => !entry.sku);
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Missing subscribed SKU(s): ${missing.map((entry) => entry.label).join(", ")}`,
+    };
+  }
+
+  const addLicenses = [];
+  const removeLicenses = [];
+  for (const entry of resolved) {
+    const skuId = entry.sku.skuId;
+    const isAssigned = assignedSkuIds.has(String(skuId).toLowerCase());
+    if (normalizedOperation === "assign") {
+      if (!isAssigned) addLicenses.push({ skuId, disabledPlans: [] });
+    } else if (isAssigned) {
+      removeLicenses.push(skuId);
+    }
+  }
+
+  if (addLicenses.length === 0 && removeLicenses.length === 0) {
+    return {
+      ok: true,
+      status: 200,
+      message:
+        normalizedOperation === "assign"
+          ? "Requested licenses are already assigned."
+          : "Requested licenses are already unassigned.",
+      changed: [],
+    };
+  }
+
+  const assignRes = await graphRequest(
+    token,
+    `/users/${encodeURIComponent(graphUser.id)}/assignLicense`,
+    {
+      method: "POST",
+      body: {
+        addLicenses,
+        removeLicenses,
+      },
+    },
+  );
+  if (!assignRes.ok) {
+    return {
+      ok: false,
+      status: assignRes.status,
+      error: `Graph assignLicense failed: ${await assignRes.text()}`,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    operation: normalizedOperation,
+    message:
+      normalizedOperation === "assign"
+        ? "Licenses assigned."
+        : "Licenses unassigned.",
+    changed: resolved.map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      skuPartNumber: entry.sku.skuPartNumber,
+      skuId: entry.sku.skuId,
+    })),
+  };
+}
+
 async function provisionGitHub(profile, secrets) {
   const template = getTemplate(profile);
   const needsGitHub =
@@ -761,7 +1141,7 @@ async function deprovisionSlack(profile, secrets) {
   return ok("slack", "Slack", "Slack account deactivated via SCIM.");
 }
 
-async function deprovisionM365(profile, secrets) {
+async function deprovisionM365(profile, secrets, action = "deactivate") {
   if (!roleNeedsM365(profile.role)) {
     return na("microsoft365", "Microsoft 365");
   }
@@ -773,23 +1153,39 @@ async function deprovisionM365(profile, secrets) {
       "Missing Microsoft Graph token.",
     );
   }
-  const upn = profile.microsoft_upn || profile.email;
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`,
+  const graphUser = await resolveMicrosoftGraphUser(profile, token);
+  if (!graphUser) {
+    return na("microsoft365", "Microsoft 365", "M365 user not found.");
+  }
+  const normalizedAction = String(action || "deactivate").toLowerCase();
+  if (normalizedAction === "delete") {
+    const deleteRes = await graphRequest(
+      token,
+      `/users/${encodeURIComponent(graphUser.id)}`,
+      { method: "DELETE" },
+    );
+    if (!deleteRes.ok && deleteRes.status !== 404) {
+      return fail(
+        "microsoft365",
+        "Microsoft 365",
+        `Graph delete failed: ${await deleteRes.text()}`,
+      );
+    }
+    return ok("microsoft365", "Microsoft 365", "M365 account deleted.");
+  }
+  const patchRes = await graphRequest(
+    token,
+    `/users/${encodeURIComponent(graphUser.id)}`,
     {
       method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ accountEnabled: false }),
+      body: { accountEnabled: false },
     },
   );
-  if (!res.ok && res.status !== 404) {
+  if (!patchRes.ok && patchRes.status !== 404) {
     return fail(
       "microsoft365",
       "Microsoft 365",
-      `Graph deprovision failed: ${await res.text()}`,
+      `Graph deprovision failed: ${await patchRes.text()}`,
     );
   }
   return ok("microsoft365", "Microsoft 365", "M365 account disabled.");
@@ -915,7 +1311,7 @@ export async function runProviderProvisioning(profile) {
   return steps;
 }
 
-export async function runProviderDeprovisioning(profile) {
+export async function runProviderDeprovisioning(profile, actions = {}) {
   const secrets = await loadProviderSecrets();
   const steps = [];
   for (const runner of [
@@ -927,7 +1323,11 @@ export async function runProviderDeprovisioning(profile) {
     deprovisionPortal,
   ]) {
     try {
-      steps.push(await runner(profile, secrets));
+      if (runner === deprovisionM365) {
+        steps.push(await runner(profile, secrets, actions.microsoft365));
+      } else {
+        steps.push(await runner(profile, secrets));
+      }
     } catch (error) {
       steps.push(fail("portal", "DEPROVISION", String(error)));
     }
