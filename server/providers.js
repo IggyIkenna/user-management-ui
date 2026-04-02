@@ -145,7 +145,11 @@ function normalizeLicenseKeys(licenseKeys) {
   return Array.from(
     new Set(
       (Array.isArray(licenseKeys) ? licenseKeys : [])
-        .map((value) => String(value || "").trim().toLowerCase())
+        .map((value) =>
+          String(value || "")
+            .trim()
+            .toLowerCase(),
+        )
         .filter(Boolean),
     ),
   ).filter((key) => key in MS_LICENSE_CATALOG);
@@ -169,7 +173,9 @@ async function graphRequest(token, path, options = {}) {
 }
 
 async function resolveMicrosoftGraphUser(profile, token) {
-  const identifier = String(profile.microsoft_upn || profile.email || "").trim();
+  const identifier = String(
+    profile.microsoft_upn || profile.email || "",
+  ).trim();
   if (!identifier) return null;
 
   const byIdentifier = await graphRequest(
@@ -213,7 +219,11 @@ async function getSubscribedSkus(token) {
 function skuMatchesCatalog(sku, catalog) {
   const part = String(sku?.skuPartNumber || "").toUpperCase();
   if (!part) return false;
-  if ((catalog.candidates || []).some((candidate) => part === candidate.toUpperCase())) {
+  if (
+    (catalog.candidates || []).some(
+      (candidate) => part === candidate.toUpperCase(),
+    )
+  ) {
     return true;
   }
   if (
@@ -235,7 +245,9 @@ function skuMatchesCatalog(sku, catalog) {
 function resolveTargetSkus(subscribedSkus, licenseKeys) {
   return normalizeLicenseKeys(licenseKeys).map((key) => {
     const catalog = MS_LICENSE_CATALOG[key];
-    const matched = subscribedSkus.find((sku) => skuMatchesCatalog(sku, catalog));
+    const matched = subscribedSkus.find((sku) =>
+      skuMatchesCatalog(sku, catalog),
+    );
     return {
       key,
       label: catalog.label,
@@ -256,7 +268,10 @@ async function getUserAssignedLicenses(token, userId) {
   return Array.isArray(body.value) ? body.value : [];
 }
 
-export async function setMicrosoft365AccountAction(profile, action = "deactivate") {
+export async function setMicrosoft365AccountAction(
+  profile,
+  action = "deactivate",
+) {
   const normalizedAction = String(action || "deactivate").toLowerCase();
   if (!["deactivate", "activate", "delete"].includes(normalizedAction)) {
     return {
@@ -360,7 +375,10 @@ export async function getMicrosoft365LicenseState(profile) {
   const assignedSkuIds = new Set(
     assignedLicenses.map((item) => String(item.skuId || "").toLowerCase()),
   );
-  const resolved = resolveTargetSkus(subscribedSkus, Object.keys(MS_LICENSE_CATALOG));
+  const resolved = resolveTargetSkus(
+    subscribedSkus,
+    Object.keys(MS_LICENSE_CATALOG),
+  );
   return {
     ok: true,
     status: 200,
@@ -374,7 +392,8 @@ export async function getMicrosoft365LicenseState(profile) {
       label: entry.label,
       available: Boolean(entry.sku),
       assigned: Boolean(
-        entry.sku && assignedSkuIds.has(String(entry.sku.skuId || "").toLowerCase()),
+        entry.sku &&
+        assignedSkuIds.has(String(entry.sku.skuId || "").toLowerCase()),
       ),
       skuPartNumber: entry.sku?.skuPartNumber || null,
       skuId: entry.sku?.skuId || null,
@@ -389,7 +408,10 @@ export async function getMicrosoft365LicenseState(profile) {
       remainingSeats:
         typeof entry.sku?.prepaidUnits?.enabled === "number" &&
         typeof entry.sku?.consumedUnits === "number"
-          ? Math.max(entry.sku.prepaidUnits.enabled - entry.sku.consumedUnits, 0)
+          ? Math.max(
+              entry.sku.prepaidUnits.enabled - entry.sku.consumedUnits,
+              0,
+            )
           : null,
     })),
   };
@@ -486,8 +508,7 @@ export async function updateMicrosoft365Licenses(
     if (userDetail.ok) {
       const userData = await userDetail.json();
       if (!userData.usageLocation) {
-        const defaultLocation =
-          process.env.MS_DEFAULT_USAGE_LOCATION || "GB";
+        const defaultLocation = process.env.MS_DEFAULT_USAGE_LOCATION || "GB";
         await graphRequest(
           token,
           `/users/${encodeURIComponent(graphUser.id)}`,

@@ -181,9 +181,9 @@ export default function UserDetailPage() {
     React.useState(false);
   const [m365LicensesLoading, setM365LicensesLoading] = React.useState(false);
   const [m365ActionMessage, setM365ActionMessage] = React.useState("");
-  const [m365Licenses, setM365Licenses] = React.useState<Microsoft365LicenseItem[]>(
-    [],
-  );
+  const [m365Licenses, setM365Licenses] = React.useState<
+    Microsoft365LicenseItem[]
+  >([]);
   const [selectedM365Licenses, setSelectedM365Licenses] = React.useState<
     Record<Microsoft365LicenseKey, boolean>
   >({
@@ -357,19 +357,26 @@ export default function UserDetailPage() {
   }
 
   function selectedLicenseKeys(): Microsoft365LicenseKey[] {
-    return M365_LICENSE_OPTIONS.filter((option) => selectedM365Licenses[option.key]).map(
-      (option) => option.key,
-    );
+    return M365_LICENSE_OPTIONS.filter(
+      (option) => selectedM365Licenses[option.key],
+    ).map((option) => option.key);
   }
 
-  async function handleM365AccountAction(action: "activate" | "deactivate" | "delete") {
+  async function handleM365AccountAction(
+    action: "activate" | "deactivate" | "delete",
+  ) {
     if (!user) return;
     setError("");
     setM365ActionMessage("");
     setM365AccountActionLoading(true);
     try {
-      const res = await updateMicrosoft365AccountAction(user.firebase_uid, action);
-      setM365ActionMessage(res.data.message || "Microsoft 365 account updated.");
+      const res = await updateMicrosoft365AccountAction(
+        user.firebase_uid,
+        action,
+      );
+      setM365ActionMessage(
+        res.data.message || "Microsoft 365 account updated.",
+      );
       await loadData();
       await loadM365Licenses();
     } catch (err) {
@@ -399,7 +406,9 @@ export default function UserDetailPage() {
       setM365Licenses(res.data.licenses || []);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to assign licenses.");
+      setError(
+        err instanceof Error ? err.message : "Failed to assign licenses.",
+      );
     } finally {
       setM365LicensesLoading(false);
     }
@@ -416,12 +425,17 @@ export default function UserDetailPage() {
     setM365ActionMessage("");
     setM365LicensesLoading(true);
     try {
-      const res = await unassignMicrosoft365Licenses(user.firebase_uid, licenses);
+      const res = await unassignMicrosoft365Licenses(
+        user.firebase_uid,
+        licenses,
+      );
       setM365ActionMessage(res.data.message || "Licenses unassigned.");
       setM365Licenses(res.data.licenses || []);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to unassign licenses.");
+      setError(
+        err instanceof Error ? err.message : "Failed to unassign licenses.",
+      );
     } finally {
       setM365LicensesLoading(false);
     }
@@ -685,10 +699,12 @@ export default function UserDetailPage() {
       {isAdmin() && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Microsoft 365 Account & Licenses</CardTitle>
+            <CardTitle className="text-base">
+              Microsoft 365 Account & Licenses
+            </CardTitle>
             <CardDescription>
-              Deactivate/delete this Microsoft account and assign or unassign key
-              licenses.
+              Deactivate/delete this Microsoft account and assign or unassign
+              key licenses.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -726,7 +742,9 @@ export default function UserDetailPage() {
                 License selection
               </p>
               {M365_LICENSE_OPTIONS.map((license) => {
-                const current = m365Licenses.find((item) => item.key === license.key);
+                const current = m365Licenses.find(
+                  (item) => item.key === license.key,
+                );
                 return (
                   <label
                     key={license.key}
@@ -748,7 +766,8 @@ export default function UserDetailPage() {
                         {typeof current?.remainingSeats === "number" &&
                           typeof current?.totalSeats === "number" && (
                             <span className="text-xs text-muted-foreground">
-                              {current.remainingSeats} remaining / {current.totalSeats} total
+                              {current.remainingSeats} remaining /{" "}
+                              {current.totalSeats} total
                             </span>
                           )}
                       </span>
