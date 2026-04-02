@@ -114,18 +114,30 @@ const MS_LICENSE_CATALOG = {
     candidates: [
       "POWER_AUTOMATE_PREMIUM",
       "POWER_AUTOMATE_ATTENDED_RPA",
+      "POWER_AUTOMATE_PER_FLOW",
       "POWER_AUTOMATE_PER_USER",
+      "POWERAUTOMATE_ATTENDED_RPA",
       "FLOW_PER_USER",
+      "FLOW_P1",
+      "FLOW_P2",
       "FLOW_FREE",
     ],
+    servicePlanPrefixes: ["FLOW_", "POWER_AUTOMATE"],
   },
   exchange_online: {
     label: "Exchange Online",
-    candidates: ["EXCHANGESTANDARD", "EXCHANGE_S_STANDARD", "EXCHANGEENTERPRISE"],
+    candidates: [
+      "EXCHANGESTANDARD",
+      "EXCHANGE_S_STANDARD",
+      "EXCHANGE_S_ENTERPRISE",
+      "EXCHANGEENTERPRISE",
+    ],
+    servicePlanPrefixes: ["EXCHANGE_"],
   },
   microsoft_365_business_premium: {
     label: "Microsoft 365 Business Premium",
-    candidates: ["SPB", "O365_BUSINESS_PREMIUM"],
+    candidates: ["SPB", "O365_BUSINESS_PREMIUM", "SPE_BUSINESS"],
+    partContains: ["BUSINESS_PREMIUM"],
   },
 };
 
@@ -189,7 +201,7 @@ async function resolveMicrosoftGraphUser(profile, token) {
 async function getSubscribedSkus(token) {
   const res = await graphRequest(
     token,
-    "/subscribedSkus?$select=skuId,skuPartNumber,prepaidUnits,consumedUnits",
+    "/subscribedSkus?$select=skuId,skuPartNumber,prepaidUnits,consumedUnits,servicePlans",
   );
   if (!res.ok) {
     throw new Error(`Graph subscribedSkus failed: ${await res.text()}`);
@@ -198,15 +210,32 @@ async function getSubscribedSkus(token) {
   return Array.isArray(body.value) ? body.value : [];
 }
 
+function skuMatchesCatalog(sku, catalog) {
+  const part = String(sku?.skuPartNumber || "").toUpperCase();
+  if (!part) return false;
+  if ((catalog.candidates || []).some((candidate) => part === candidate.toUpperCase())) {
+    return true;
+  }
+  if (
+    (catalog.partContains || []).some((fragment) =>
+      part.includes(String(fragment).toUpperCase()),
+    )
+  ) {
+    return true;
+  }
+  const servicePlans = Array.isArray(sku?.servicePlans) ? sku.servicePlans : [];
+  return servicePlans.some((plan) => {
+    const planName = String(plan?.servicePlanName || "").toUpperCase();
+    return (catalog.servicePlanPrefixes || []).some((prefix) =>
+      planName.startsWith(String(prefix).toUpperCase()),
+    );
+  });
+}
+
 function resolveTargetSkus(subscribedSkus, licenseKeys) {
-  const partToSku = new Map(
-    subscribedSkus.map((sku) => [String(sku.skuPartNumber || "").toUpperCase(), sku]),
-  );
   return normalizeLicenseKeys(licenseKeys).map((key) => {
     const catalog = MS_LICENSE_CATALOG[key];
-    const matched = catalog.candidates
-      .map((part) => partToSku.get(part.toUpperCase()))
-      .find(Boolean);
+    const matched = subscribedSkus.find((sku) => skuMatchesCatalog(sku, catalog));
     return {
       key,
       label: catalog.label,
