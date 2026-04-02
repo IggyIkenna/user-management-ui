@@ -25,6 +25,8 @@ env:
   GCP_PROJECT: central-element-323112
   API_SERVICE: user-management-api
   API_PORT: "8017"
+  # MS Graph: client secret lives in Secret Manager; runtime resolves via SECRET_REF (see server/secret-manager.js).
+  SECRET_REF_MS_GRAPH: projects/central-element-323112/secrets/ms-graph-client-secret/versions/latest
 
 jobs:
   deploy-api:
@@ -52,7 +54,8 @@ jobs:
             --region ${{ github.event.inputs.region }} \
             --port ${{ env.API_PORT }} \
             --allow-unauthenticated \
-            --project ${{ env.GCP_PROJECT }}
+            --project ${{ env.GCP_PROJECT }} \
+            --update-env-vars="MS_TENANT_ID=80af43c7-5279-404c-86d9-e44617ca65d7,MS_GRAPH_CLIENT_ID=41c4bf02-68ee-460d-ba6e-4d9de3ad1294,MS_GRAPH_API_BASE_URL=https://graph.microsoft.com/v1.0,MS_GRAPH_SCOPE=https://graph.microsoft.com/.default,MS_DEFAULT_DOMAIN=odum-research.com,SECRET_REF_MS_GRAPH_CLIENT_SECRET=${{ env.SECRET_REF_MS_GRAPH }}"
 
       - name: Verify API health
         run: |
