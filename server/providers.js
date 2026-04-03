@@ -521,22 +521,64 @@ export async function updateMicrosoft365Licenses(
     }
   }
 
-  const assignRes = await graphRequest(
-    token,
-    `/users/${encodeURIComponent(graphUser.id)}/assignLicense`,
-    {
-      method: "POST",
-      body: {
-        addLicenses,
-        removeLicenses,
+  const results = [];
+  const ops =
+    normalizedOperation === "assign"
+      ? addLicenses.map((l) => ({
+          add: [l],
+          remove: [],
+          entry: resolved.find((r) => r.sku && r.sku.skuId === l.skuId),
+        }))
+      : removeLicenses.map((skuId) => ({
+          add: [],
+          remove: [skuId],
+          entry: resolved.find(
+            (r) =>
+              r.sku &&
+              String(r.sku.skuId).toLowerCase() === String(skuId).toLowerCase(),
+          ),
+        }));
+
+  for (const op of ops) {
+    const label = op.entry?.label || "Unknown";
+    const key = op.entry?.key || "unknown";
+    const skuPartNumber = op.entry?.sku?.skuPartNumber || null;
+
+    const res = await graphRequest(
+      token,
+      `/users/${encodeURIComponent(graphUser.id)}/assignLicense`,
+      {
+        method: "POST",
+        body: { addLicenses: op.add, removeLicenses: op.remove },
       },
-    },
-  );
-  if (!assignRes.ok) {
+    );
+    if (res.ok) {
+      results.push({ key, label, skuPartNumber, status: "success" });
+    } else {
+      const body = await res.text();
+      let reason = body;
+      try {
+        const parsed = JSON.parse(body);
+        reason = parsed?.error?.message || body;
+      } catch {
+        /* keep raw */
+      }
+      results.push({ key, label, skuPartNumber, status: "failed", reason });
+    }
+    if (ops.length > 1) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  const succeeded = results.filter((r) => r.status === "success");
+  const failed = results.filter((r) => r.status === "failed");
+
+  if (succeeded.length === 0 && failed.length > 0) {
     return {
       ok: false,
-      status: assignRes.status,
-      error: `Graph assignLicense failed: ${await assignRes.text()}`,
+      status: 400,
+      error: failed.map((f) => `${f.label}: ${f.reason}`).join("; "),
+      results,
     };
   }
 
@@ -545,14 +587,16 @@ export async function updateMicrosoft365Licenses(
     status: 200,
     operation: normalizedOperation,
     message:
-      normalizedOperation === "assign"
-        ? "Licenses assigned."
-        : "Licenses unassigned.",
-    changed: resolved.map((entry) => ({
-      key: entry.key,
-      label: entry.label,
-      skuPartNumber: entry.sku.skuPartNumber,
-      skuId: entry.sku.skuId,
+      succeeded.length === results.length
+        ? normalizedOperation === "assign"
+          ? "All licenses assigned."
+          : "All licenses unassigned."
+        : `${succeeded.length}/${results.length} succeeded.`,
+    results,
+    changed: succeeded.map((r) => ({
+      key: r.key,
+      label: r.label,
+      skuPartNumber: r.skuPartNumber,
     })),
   };
 }
