@@ -522,24 +522,7 @@ export async function updateMicrosoft365Licenses(
         results: [],
       };
     }
-    await new Promise((r) => setTimeout(r, 2000));
-
-    const verifyRes = await graphRequest(
-      token,
-      `/users/${encodeURIComponent(graphUser.id)}?$select=usageLocation`,
-    );
-    if (verifyRes.ok) {
-      const verifyData = await verifyRes.json();
-      if (!verifyData.usageLocation) {
-        return {
-          ok: false,
-          status: 500,
-          error:
-            "usageLocation was set but Graph still reports it as empty. Please retry in a few seconds.",
-          results: [],
-        };
-      }
-    }
+    await new Promise((r) => setTimeout(r, 3000));
   }
 
   const results = [];
@@ -565,7 +548,7 @@ export async function updateMicrosoft365Licenses(
     const key = op.entry?.key || "unknown";
     const skuPartNumber = op.entry?.sku?.skuPartNumber || null;
 
-    const res = await graphRequest(
+    let res = await graphRequest(
       token,
       `/users/${encodeURIComponent(graphUser.id)}/assignLicense`,
       {
@@ -573,6 +556,30 @@ export async function updateMicrosoft365Licenses(
         body: { addLicenses: op.add, removeLicenses: op.remove },
       },
     );
+
+    if (!res.ok) {
+      const firstBody = await res.text();
+      const isLocationError =
+        firstBody.includes("invalid usage location") ||
+        firstBody.includes("usageLocation");
+      if (isLocationError && normalizedOperation === "assign") {
+        await new Promise((r) => setTimeout(r, 5000));
+        res = await graphRequest(
+          token,
+          `/users/${encodeURIComponent(graphUser.id)}/assignLicense`,
+          {
+            method: "POST",
+            body: { addLicenses: op.add, removeLicenses: op.remove },
+          },
+        );
+        if (res.ok) {
+          results.push({ key, label, skuPartNumber, status: "success" });
+          if (ops.length > 1) await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+      }
+    }
+
     if (res.ok) {
       results.push({ key, label, skuPartNumber, status: "success" });
     } else {
