@@ -508,10 +508,38 @@ export async function updateMicrosoft365Licenses(
 
   if (normalizedOperation === "assign") {
     const defaultLocation = process.env.MS_DEFAULT_USAGE_LOCATION || "GB";
-    await graphRequest(token, `/users/${encodeURIComponent(graphUser.id)}`, {
-      method: "PATCH",
-      body: { usageLocation: defaultLocation },
-    });
+    const patchRes = await graphRequest(
+      token,
+      `/users/${encodeURIComponent(graphUser.id)}`,
+      { method: "PATCH", body: { usageLocation: defaultLocation } },
+    );
+    if (!patchRes.ok) {
+      const patchBody = await patchRes.text();
+      return {
+        ok: false,
+        status: patchRes.status,
+        error: `Failed to set usageLocation to "${defaultLocation}": ${patchBody}`,
+        results: [],
+      };
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const verifyRes = await graphRequest(
+      token,
+      `/users/${encodeURIComponent(graphUser.id)}?$select=usageLocation`,
+    );
+    if (verifyRes.ok) {
+      const verifyData = await verifyRes.json();
+      if (!verifyData.usageLocation) {
+        return {
+          ok: false,
+          status: 500,
+          error:
+            "usageLocation was set but Graph still reports it as empty. Please retry in a few seconds.",
+          results: [],
+        };
+      }
+    }
   }
 
   const results = [];
