@@ -412,7 +412,7 @@ export default function UserDetailPage() {
       );
       if (failed.length > 0 && succeeded.length > 0) {
         setM365ActionMessage(
-          `${succeeded.length} assigned. Failed: ${failed.map((f: { label: string; reason: string }) => `${f.label} (${f.reason})`).join(", ")}`,
+          `${succeeded.length} assigned. Failed: ${failed.map((f: { label: string; reason?: string }) => `${f.label} (${f.reason || "unknown"})`).join(", ")}`,
         );
       } else {
         setM365ActionMessage(data.message || "Licenses assigned.");
@@ -453,7 +453,7 @@ export default function UserDetailPage() {
       );
       if (failed.length > 0 && succeeded.length > 0) {
         setM365ActionMessage(
-          `${succeeded.length} unassigned. Failed: ${failed.map((f: { label: string; reason: string }) => `${f.label} (${f.reason})`).join(", ")}`,
+          `${succeeded.length} unassigned. Failed: ${failed.map((f: { label: string; reason?: string }) => `${f.label} (${f.reason || "unknown"})`).join(", ")}`,
         );
       } else {
         setM365ActionMessage(data.message || "Licenses unassigned.");
