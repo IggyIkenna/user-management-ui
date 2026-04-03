@@ -507,24 +507,11 @@ export async function updateMicrosoft365Licenses(
   }
 
   if (normalizedOperation === "assign") {
-    const userDetail = await graphRequest(
-      token,
-      `/users/${encodeURIComponent(graphUser.id)}?$select=usageLocation`,
-    );
-    if (userDetail.ok) {
-      const userData = await userDetail.json();
-      if (!userData.usageLocation) {
-        const defaultLocation = process.env.MS_DEFAULT_USAGE_LOCATION || "GB";
-        await graphRequest(
-          token,
-          `/users/${encodeURIComponent(graphUser.id)}`,
-          {
-            method: "PATCH",
-            body: { usageLocation: defaultLocation },
-          },
-        );
-      }
-    }
+    const defaultLocation = process.env.MS_DEFAULT_USAGE_LOCATION || "GB";
+    await graphRequest(token, `/users/${encodeURIComponent(graphUser.id)}`, {
+      method: "PATCH",
+      body: { usageLocation: defaultLocation },
+    });
   }
 
   const results = [];
