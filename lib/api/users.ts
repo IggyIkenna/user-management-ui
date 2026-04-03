@@ -104,6 +104,13 @@ export async function assignMicrosoft365Licenses(
       skuPartNumber: string;
       skuId: string;
     }>;
+    results: Array<{
+      key: string;
+      label: string;
+      skuPartNumber: string | null;
+      status: "success" | "failed";
+      reason?: string;
+    }>;
     licenses: Microsoft365LicenseItem[];
   }>(`/users/${id}/microsoft365/licenses/assign`, {
     licenses,
@@ -122,6 +129,13 @@ export async function unassignMicrosoft365Licenses(
       label: string;
       skuPartNumber: string;
       skuId: string;
+    }>;
+    results: Array<{
+      key: string;
+      label: string;
+      skuPartNumber: string | null;
+      status: "success" | "failed";
+      reason?: string;
     }>;
     licenses: Microsoft365LicenseItem[];
   }>(`/users/${id}/microsoft365/licenses/unassign`, {
