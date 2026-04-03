@@ -216,7 +216,7 @@ async function getSubscribedSkus(token) {
   return Array.isArray(body.value) ? body.value : [];
 }
 
-function skuMatchesCatalog(sku, catalog) {
+function skuMatchesCandidates(sku, catalog) {
   const part = String(sku?.skuPartNumber || "").toUpperCase();
   if (!part) return false;
   if (
@@ -226,17 +226,17 @@ function skuMatchesCatalog(sku, catalog) {
   ) {
     return true;
   }
-  if (
-    (catalog.partContains || []).some((fragment) =>
-      part.includes(String(fragment).toUpperCase()),
-    )
-  ) {
-    return true;
-  }
+  return (catalog.partContains || []).some((fragment) =>
+    part.includes(String(fragment).toUpperCase()),
+  );
+}
+
+function skuMatchesServicePlans(sku, catalog) {
+  if (!(catalog.servicePlanPrefixes || []).length) return false;
   const servicePlans = Array.isArray(sku?.servicePlans) ? sku.servicePlans : [];
   return servicePlans.some((plan) => {
     const planName = String(plan?.servicePlanName || "").toUpperCase();
-    return (catalog.servicePlanPrefixes || []).some((prefix) =>
+    return catalog.servicePlanPrefixes.some((prefix) =>
       planName.startsWith(String(prefix).toUpperCase()),
     );
   });
@@ -245,13 +245,19 @@ function skuMatchesCatalog(sku, catalog) {
 function resolveTargetSkus(subscribedSkus, licenseKeys) {
   return normalizeLicenseKeys(licenseKeys).map((key) => {
     const catalog = MS_LICENSE_CATALOG[key];
-    const matched = subscribedSkus.find((sku) =>
-      skuMatchesCatalog(sku, catalog),
+    const byCandidate = subscribedSkus.find((sku) =>
+      skuMatchesCandidates(sku, catalog),
+    );
+    if (byCandidate) {
+      return { key, label: catalog.label, sku: byCandidate };
+    }
+    const byServicePlan = subscribedSkus.find((sku) =>
+      skuMatchesServicePlans(sku, catalog),
     );
     return {
       key,
       label: catalog.label,
-      sku: matched || null,
+      sku: byServicePlan || null,
     };
   });
 }
