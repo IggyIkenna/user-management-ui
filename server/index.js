@@ -1462,6 +1462,31 @@ app.post("/api/v1/users/:id/issue-work-email", async (req, res) => {
       message: result.message,
     });
 
+    const personalEmail = profile.email;
+    if (personalEmail && result.created && result.tempPassword) {
+      try {
+        await sendEmail({
+          to: personalEmail,
+          subject: "Your Odum Research Work Email Has Been Created",
+          html: [
+            `<h2>Welcome to Odum Research</h2>`,
+            `<p>Hi ${profile.name || "there"},</p>`,
+            `<p>Your Microsoft 365 work email has been created. Here are your sign-in details:</p>`,
+            `<table style="border-collapse:collapse;margin:16px 0">`,
+            `<tr><td style="padding:8px 16px 8px 0;font-weight:bold">Work email:</td><td style="padding:8px 0">${result.upn}</td></tr>`,
+            `<tr><td style="padding:8px 16px 8px 0;font-weight:bold">Temporary password:</td><td style="padding:8px 0"><code>${result.tempPassword}</code></td></tr>`,
+            `</table>`,
+            `<p><strong>Important:</strong> You will be required to change your password when you first sign in.</p>`,
+            `<p>Sign in at <a href="https://portal.office.com">https://portal.office.com</a> using your work email and temporary password above.</p>`,
+            `<p>If you have any questions, please contact your administrator.</p>`,
+            `<p>— Odum Research</p>`,
+          ].join(""),
+        });
+      } catch {
+        /* email notification is best-effort */
+      }
+    }
+
     const updated = await profileRef.get();
     return res.json({
       upn: result.upn,

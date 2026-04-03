@@ -886,6 +886,7 @@ export async function issueMicrosoftWorkEmail(profile, options = {}) {
     };
   }
 
+  const tempPassword = process.env.MS_TEMP_PASSWORD || "TempPass#2026!";
   const payload = {
     accountEnabled: true,
     displayName: profile.name,
@@ -893,7 +894,7 @@ export async function issueMicrosoftWorkEmail(profile, options = {}) {
     userPrincipalName: upn,
     passwordProfile: {
       forceChangePasswordNextSignIn: true,
-      password: process.env.MS_TEMP_PASSWORD || "TempPass#2026!",
+      password: tempPassword,
     },
   };
 
@@ -919,6 +920,7 @@ export async function issueMicrosoftWorkEmail(profile, options = {}) {
     status: 201,
     upn,
     created: true,
+    tempPassword,
     message: "Microsoft 365 account created.",
   };
 }
