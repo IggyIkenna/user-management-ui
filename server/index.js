@@ -1478,11 +1478,9 @@ app.get("/api/v1/users/:id/microsoft365/licenses", async (req, res) => {
   try {
     const actor = await getActorFromRequest(req);
     if (!actor || !(await isPlatformAdmin(actor.uid))) {
-      return res
-        .status(403)
-        .json({
-          error: "Only platform admins can manage Microsoft 365 licenses.",
-        });
+      return res.status(403).json({
+        error: "Only platform admins can manage Microsoft 365 licenses.",
+      });
     }
     const id = await resolveUserUid(req.params.id);
     const profileRef = usersCollection().doc(id);
@@ -1496,11 +1494,9 @@ app.get("/api/v1/users/:id/microsoft365/licenses", async (req, res) => {
       firebase_uid: id,
     });
     if (!result.ok) {
-      return res
-        .status(result.status || 500)
-        .json({
-          error: result.error || "Failed to fetch Microsoft 365 licenses.",
-        });
+      return res.status(result.status || 500).json({
+        error: result.error || "Failed to fetch Microsoft 365 licenses.",
+      });
     }
     return res.json(result);
   } catch (error) {
@@ -1512,11 +1508,9 @@ app.post("/api/v1/users/:id/microsoft365/account-action", async (req, res) => {
   try {
     const actor = await getActorFromRequest(req);
     if (!actor || !(await isPlatformAdmin(actor.uid))) {
-      return res
-        .status(403)
-        .json({
-          error: "Only platform admins can manage Microsoft 365 accounts.",
-        });
+      return res.status(403).json({
+        error: "Only platform admins can manage Microsoft 365 accounts.",
+      });
     }
     const id = await resolveUserUid(req.params.id);
     const profileRef = usersCollection().doc(id);
@@ -1531,11 +1525,9 @@ app.post("/api/v1/users/:id/microsoft365/account-action", async (req, res) => {
       action,
     );
     if (!result.ok) {
-      return res
-        .status(result.status || 500)
-        .json({
-          error: result.error || "Failed to update Microsoft 365 account.",
-        });
+      return res.status(result.status || 500).json({
+        error: result.error || "Failed to update Microsoft 365 account.",
+      });
     }
 
     const now = new Date().toISOString();
@@ -1588,11 +1580,9 @@ app.post(
     try {
       const actor = await getActorFromRequest(req);
       if (!actor || !(await isPlatformAdmin(actor.uid))) {
-        return res
-          .status(403)
-          .json({
-            error: "Only platform admins can manage Microsoft 365 licenses.",
-          });
+        return res.status(403).json({
+          error: "Only platform admins can manage Microsoft 365 licenses.",
+        });
       }
       const operation = String(req.params.operation || "").toLowerCase();
       if (!["assign", "unassign"].includes(operation)) {
@@ -1620,11 +1610,10 @@ app.post(
         requestedLicenses,
       );
       if (!result.ok) {
-        return res
-          .status(result.status || 500)
-          .json({
-            error: result.error || "Failed to update Microsoft 365 licenses.",
-          });
+        return res.status(result.status || 500).json({
+          error: result.error || "Failed to update Microsoft 365 licenses.",
+          results: result.results || [],
+        });
       }
 
       const now = new Date().toISOString();
@@ -1664,6 +1653,7 @@ app.post(
         operation,
         message: result.message,
         changed: result.changed || [],
+        results: result.results || [],
         licenses:
           state.ok && Array.isArray(state.licenses) ? state.licenses : [],
       });

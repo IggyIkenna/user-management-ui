@@ -402,8 +402,22 @@ export default function UserDetailPage() {
     setM365LicensesLoading(true);
     try {
       const res = await assignMicrosoft365Licenses(user.firebase_uid, licenses);
-      setM365ActionMessage(res.data.message || "Licenses assigned.");
-      setM365Licenses(res.data.licenses || []);
+      const data = res.data;
+      const results = data.results || [];
+      const failed = results.filter(
+        (r: { status: string }) => r.status === "failed",
+      );
+      const succeeded = results.filter(
+        (r: { status: string }) => r.status === "success",
+      );
+      if (failed.length > 0 && succeeded.length > 0) {
+        setM365ActionMessage(
+          `${succeeded.length} assigned. Failed: ${failed.map((f: { label: string; reason: string }) => `${f.label} (${f.reason})`).join(", ")}`,
+        );
+      } else {
+        setM365ActionMessage(data.message || "Licenses assigned.");
+      }
+      await loadM365Licenses();
       await loadData();
     } catch (err) {
       setError(
@@ -429,8 +443,22 @@ export default function UserDetailPage() {
         user.firebase_uid,
         licenses,
       );
-      setM365ActionMessage(res.data.message || "Licenses unassigned.");
-      setM365Licenses(res.data.licenses || []);
+      const data = res.data;
+      const results = data.results || [];
+      const failed = results.filter(
+        (r: { status: string }) => r.status === "failed",
+      );
+      const succeeded = results.filter(
+        (r: { status: string }) => r.status === "success",
+      );
+      if (failed.length > 0 && succeeded.length > 0) {
+        setM365ActionMessage(
+          `${succeeded.length} unassigned. Failed: ${failed.map((f: { label: string; reason: string }) => `${f.label} (${f.reason})`).join(", ")}`,
+        );
+      } else {
+        setM365ActionMessage(data.message || "Licenses unassigned.");
+      }
+      await loadM365Licenses();
       await loadData();
     } catch (err) {
       setError(
