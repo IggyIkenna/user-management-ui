@@ -42,7 +42,7 @@ export async function removeGroupMember(groupId: string, firebaseUid: string) {
 
 export async function bulkAssignGroupToApps(
   groupId: string,
-  data: { app_ids: string[]; role: string },
+  data: { app_ids: string[]; role: string; environments?: string[] },
 ) {
   return apiClient.post<BulkAssignResult>(
     `/groups/${groupId}/bulk-assign`,

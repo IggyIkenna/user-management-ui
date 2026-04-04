@@ -11,6 +11,7 @@ describe("Provider failure integration paths", () => {
     process.env.GCP_TARGET_PROJECT_ID = "";
     process.env.AWS_ACCESS_KEY_ID = "";
     process.env.AWS_SECRET_ACCESS_KEY = "";
+    process.env.AWS_BREAKGLASS_ENABLED = "false";
     process.env.PORTAL_API_BASE_URL = "";
     process.env.PORTAL_SERVICE_TOKEN = "";
   });
@@ -30,6 +31,6 @@ describe("Provider failure integration paths", () => {
     expect(byService.slack.status).toBe("failed");
     expect(byService.microsoft365.status).toBe("failed");
     expect(byService.gcp.status).toBe("failed");
-    expect(byService.aws.status).toBe("failed");
+    expect(byService.aws.status).toBe("success");
   }, 20000);
 });

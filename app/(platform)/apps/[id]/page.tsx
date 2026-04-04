@@ -97,6 +97,7 @@ export default function AppDetailPage() {
     subject_id: "",
     subject_label: "",
     role: "viewer" as AppRole,
+    environments: [] as string[],
     capabilities: [] as string[],
     overrideCapabilities: false,
   });
@@ -162,10 +163,19 @@ export default function AppDetailPage() {
     fetchAudit();
   }, [fetchApp, fetchEntitlements, fetchCapabilities, fetchAudit]);
 
+  function toggleEnv(env: string) {
+    setGrantForm((f) => ({
+      ...f,
+      environments: f.environments.includes(env)
+        ? f.environments.filter((e) => e !== env)
+        : [...f.environments, env],
+    }));
+  }
+
   async function handleGrant(e: React.FormEvent) {
     e.preventDefault();
-    if (!grantForm.subject_id.trim()) {
-      setGrantError("Subject is required.");
+    if (!grantForm.subject_id.trim() || grantForm.environments.length === 0) {
+      setGrantError("Subject ID and at least one environment are required.");
       return;
     }
     setGranting(true);
@@ -181,6 +191,7 @@ export default function AppDetailPage() {
         capabilities: grantForm.overrideCapabilities
           ? grantForm.capabilities
           : undefined,
+        environments: grantForm.environments,
       });
       setGrantOpen(false);
       setGrantForm({
@@ -188,6 +199,7 @@ export default function AppDetailPage() {
         subject_id: "",
         subject_label: "",
         role: "viewer",
+        environments: [],
         capabilities: [],
         overrideCapabilities: false,
       });
@@ -243,6 +255,9 @@ export default function AppDetailPage() {
     );
   }
 
+  const envChoices =
+    app.environments.length > 0 ? app.environments : ["dev", "staging", "prod"];
+
   return (
     <div className="space-y-6">
       <Link href="/apps">
@@ -277,6 +292,14 @@ export default function AppDetailPage() {
         <CardContent>
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span>Owner: {app.owner_team}</span>
+            <span>
+              Environments:{" "}
+              {app.environments.map((env) => (
+                <Badge key={env} variant="secondary" className="text-xs ml-1">
+                  {env}
+                </Badge>
+              ))}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -311,11 +334,16 @@ export default function AppDetailPage() {
               onOpenChange={(open) => {
                 setGrantOpen(open);
                 if (open) {
+                  const envs =
+                    app.environments.length > 0
+                      ? app.environments
+                      : ["dev", "staging", "prod"];
                   setGrantForm({
                     subject_type: "user",
                     subject_id: "",
                     subject_label: "",
                     role: "viewer",
+                    environments: [...envs],
                     capabilities: [],
                     overrideCapabilities: false,
                   });
@@ -390,6 +418,26 @@ export default function AppDetailPage() {
                           <SelectItem value="owner">Owner</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Environments</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Uses registry values: {envChoices.join(", ")}.
+                      </p>
+                      <div className="flex flex-wrap gap-4">
+                        {envChoices.map((env) => (
+                          <label
+                            key={env}
+                            className="flex items-center gap-1.5 text-sm"
+                          >
+                            <Checkbox
+                              checked={grantForm.environments.includes(env)}
+                              onCheckedChange={() => toggleEnv(env)}
+                            />
+                            {env}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                     {capDefinition && capDefinition.capabilities.length > 0 && (
                       <div className="space-y-1.5">
@@ -473,7 +521,7 @@ export default function AppDetailPage() {
           </div>
 
           {entLoading ? (
-            <TableSkeleton rows={5} columns={5} />
+            <TableSkeleton rows={5} columns={6} />
           ) : entitlements.length === 0 ? (
             <EmptyState
               icon={ShieldAlert}
@@ -488,6 +536,7 @@ export default function AppDetailPage() {
                     <TableHead>Subject</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Environments</TableHead>
                     <TableHead>Granted</TableHead>
                     <TableHead className="w-16" />
                   </TableRow>
@@ -502,6 +551,19 @@ export default function AppDetailPage() {
                         <Badge variant="outline">{ent.subject_type}</Badge>
                       </TableCell>
                       <TableCell>{ent.role}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1 flex-wrap">
+                          {(ent.environments ?? []).map((env) => (
+                            <Badge
+                              key={env}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {env}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {formatDateTime(ent.created_at)}
                       </TableCell>

@@ -110,6 +110,7 @@ export default function GroupsPage() {
   const [appsLoading, setAppsLoading] = React.useState(false);
   const [selectedApps, setSelectedApps] = React.useState<string[]>([]);
   const [bulkRole, setBulkRole] = React.useState("viewer");
+  const [bulkEnvs, setBulkEnvs] = React.useState<string[]>([]);
   const [bulkAssigning, setBulkAssigning] = React.useState(false);
 
   const fetchGroups = React.useCallback(async () => {
@@ -213,6 +214,7 @@ export default function GroupsPage() {
     setBulkGroupId(groupId);
     setSelectedApps([]);
     setBulkRole("viewer");
+    setBulkEnvs([]);
     if (apps.length === 0) {
       setAppsLoading(true);
       try {
@@ -233,6 +235,7 @@ export default function GroupsPage() {
       await bulkAssignGroupToApps(bulkGroupId, {
         app_ids: selectedApps,
         role: bulkRole,
+        environments: bulkEnvs,
       });
       setBulkGroupId(null);
       await fetchGroups();
@@ -248,6 +251,14 @@ export default function GroupsPage() {
       prev.includes(appId) ? prev.filter((a) => a !== appId) : [...prev, appId],
     );
   }
+
+  function toggleEnv(env: string) {
+    setBulkEnvs((prev) =>
+      prev.includes(env) ? prev.filter((e) => e !== env) : [...prev, env],
+    );
+  }
+
+  const ENV_OPTIONS = ["development", "staging", "production"];
 
   return (
     <div className="space-y-6">
@@ -513,6 +524,23 @@ export default function GroupsPage() {
               </Select>
             </div>
             <div className="space-y-1.5">
+              <Label>Environments</Label>
+              <div className="flex gap-4">
+                {ENV_OPTIONS.map((env) => (
+                  <label
+                    key={env}
+                    className="flex items-center gap-1.5 text-sm"
+                  >
+                    <Checkbox
+                      checked={bulkEnvs.includes(env)}
+                      onCheckedChange={() => toggleEnv(env)}
+                    />
+                    {env}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
               <Label>Applications</Label>
               {appsLoading ? (
                 <div className="flex justify-center py-4">
@@ -539,7 +567,11 @@ export default function GroupsPage() {
           <DialogFooter>
             <Button
               onClick={handleBulkAssign}
-              disabled={bulkAssigning || selectedApps.length === 0}
+              disabled={
+                bulkAssigning ||
+                selectedApps.length === 0 ||
+                bulkEnvs.length === 0
+              }
             >
               {bulkAssigning
                 ? "Assigning…"

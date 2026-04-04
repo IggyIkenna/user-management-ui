@@ -39,8 +39,8 @@ test.describe("user lifecycle smoke", () => {
         });
       }
 
-      if (method === "GET" && path.startsWith("/api/v1/users/")) {
-        const id = path.split("/").pop();
+      if (method === "GET" && /^\/api\/v1\/users\/[^/]+$/.test(path)) {
+        const id = path.split("/").pop() as string;
         const user = users.find((u) => u.id === id);
         return route.fulfill({
           status: user ? 200 : 404,
@@ -127,6 +127,7 @@ test.describe("user lifecycle smoke", () => {
           contentType: "application/json",
           body: JSON.stringify({
             workflow_execution: "smoke/reprovision/1",
+            workflow_state: "STARTED",
             provisioning_steps: [],
           }),
         });
@@ -140,6 +141,22 @@ test.describe("user lifecycle smoke", () => {
         });
       }
 
+      if (method === "GET" && path.endsWith("/documents")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ documents: [], total: 0 }),
+        });
+      }
+
+      if (method === "GET" && path.endsWith("/effective-access")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ effective_access: [] }),
+        });
+      }
+
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -150,25 +167,30 @@ test.describe("user lifecycle smoke", () => {
 
   test("onboard flow", async ({ page }) => {
     await page.goto("/onboard");
-    await page.getByPlaceholder("Jane Doe").fill("Smoke User");
+    await page.getByPlaceholder("John Doe").fill("Smoke User");
     await page
-      .getByPlaceholder("jane@odum-research.com")
+      .getByPlaceholder("john@odum-research.com")
       .fill("smoke-user@test.com");
-    await page.getByRole("button", { name: "elysium" }).click();
+    await page.getByLabel("Role").click();
+    await page.getByRole("option", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Onboard User" }).click();
-    await expect(page.getByText("Provisioning Complete")).toBeVisible();
+    await expect(page.getByText("User Onboarded")).toBeVisible();
   });
 
   test("offboard flow", async ({ page }) => {
     await page.goto("/users/usr-001/offboard");
-    await expect(page.getByText("Offboard Smoke Admin")).toBeVisible();
+    await expect(
+      page.locator("span.font-medium").getByText("Smoke Admin"),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Offboard User" }).click();
     await page.getByRole("button", { name: "Confirm Offboard" }).click();
-    await page.waitForURL("**/users/usr-001");
+    await expect(page.getByText("User Offboarded")).toBeVisible();
   });
 
   test("reprovision flow", async ({ page }) => {
     await page.goto("/users/usr-001");
-    await page.getByRole("button", { name: "Re-provision" }).click();
-    await expect(page.getByText("Workflow Runs")).toBeVisible();
+    await page.getByRole("button", { name: "Actions" }).click();
+    await page.getByRole("menuitem", { name: "Re-provision" }).click();
+    await expect(page.getByText("Workflow History")).toBeVisible();
   });
 });

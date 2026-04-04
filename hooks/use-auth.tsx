@@ -9,6 +9,12 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onIdTokenChanged,
+} from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase";
 import type {
   AuthUser,
   Entitlement,
@@ -23,7 +29,10 @@ interface AuthState {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   hasEntitlement: (entitlement: Entitlement) => boolean;
   isAdmin: () => boolean;
@@ -81,49 +90,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (savedToken && savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser) as AuthUser;
-        setToken(savedToken);
-        setUser(parsed);
-      } catch {
+    const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const freshToken = await firebaseUser.getIdToken();
+        localStorage.setItem(TOKEN_KEY, freshToken);
+        setToken(freshToken);
+
+        const savedUser = localStorage.getItem(USER_KEY);
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser) as AuthUser);
+          } catch {
+            const profile = await fetchProfile(firebaseUser.uid);
+            if (profile) {
+              localStorage.setItem(USER_KEY, JSON.stringify(profile));
+              setUser(profile);
+            }
+          }
+        } else {
+          const profile = await fetchProfile(firebaseUser.uid);
+          if (profile) {
+            localStorage.setItem(USER_KEY, JSON.stringify(profile));
+            setUser(profile);
+          }
+        }
+      } else {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
+        setToken(null);
+        setUser(null);
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string): Promise<boolean> => {
+    async (
+      email: string,
+      password: string,
+    ): Promise<{ success: boolean; error?: string }> => {
       try {
-        const res = await apiClient.post<{ token: string; uid: string }>(
-          "/auth/login",
-          {
-            email,
-            password,
-          },
+        const cred = await signInWithEmailAndPassword(
+          firebaseAuth,
+          email,
+          password,
         );
-        const { token: newToken, uid } = res.data;
-        localStorage.setItem(TOKEN_KEY, newToken);
-        setToken(newToken);
-        const profile = await fetchProfile(uid);
+        const freshToken = await cred.user.getIdToken();
+        localStorage.setItem(TOKEN_KEY, freshToken);
+        setToken(freshToken);
+        const profile = await fetchProfile(cred.user.uid);
         if (profile) {
           localStorage.setItem(USER_KEY, JSON.stringify(profile));
           setUser(profile);
-          return true;
+          return { success: true };
         }
-        return false;
-      } catch {
-        return false;
+        return {
+          success: false,
+          error: "Failed to load user profile. Please try again.",
+        };
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code || "";
+        const FIREBASE_ERRORS: Record<string, string> = {
+          "auth/invalid-credential": "Invalid email or password.",
+          "auth/invalid-email": "Please enter a valid email address.",
+          "auth/user-disabled":
+            "This account has been disabled. Contact an administrator.",
+          "auth/user-not-found": "No account found with this email.",
+          "auth/wrong-password": "Incorrect password.",
+          "auth/too-many-requests":
+            "Too many failed attempts. Please wait a moment and try again.",
+          "auth/network-request-failed":
+            "Network error. Check your connection and try again.",
+        };
+        return {
+          success: false,
+          error:
+            FIREBASE_ERRORS[code] ||
+            `Login failed (${code || "unknown error"}).`,
+        };
       }
     },
     [],
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await signOut(firebaseAuth);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setUser(null);

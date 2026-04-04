@@ -234,6 +234,7 @@ export interface GrantEntitlementRequest {
   subject_id: string;
   subject_label: string;
   role: AppRole;
+  environments?: string[];
   capabilities?: string[];
   granted_by?: string;
   expires_at?: string;

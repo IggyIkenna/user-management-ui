@@ -184,7 +184,7 @@ export default function AppsPage() {
       </div>
 
       {loading ? (
-        <TableSkeleton rows={8} columns={6} />
+        <TableSkeleton rows={8} columns={7} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={AppWindow}
@@ -199,6 +199,7 @@ export default function AppsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Auth</TableHead>
+                <TableHead>Environments</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16" />
@@ -222,6 +223,19 @@ export default function AppsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {app.auth_mode}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1 flex-wrap">
+                      {app.environments.map((env) => (
+                        <Badge
+                          key={env}
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {env}
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {app.owner_team}
