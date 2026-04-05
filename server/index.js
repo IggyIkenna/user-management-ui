@@ -2893,7 +2893,10 @@ app.get("/api/v1/users/:uid/documents", async (req, res) => {
       .where("firebase_uid", "==", req.params.uid)
       .orderBy("uploaded_at", "desc")
       .get();
-    const documents = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const documents = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
     res.json({ documents, total: documents.length });
   } catch (error) {
     res.status(500).json({ error: String(error) });

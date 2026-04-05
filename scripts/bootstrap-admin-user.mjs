@@ -30,7 +30,8 @@ for (const envFile of [".env.development", ".env.local", ".env"]) {
   }
 }
 
-const FIREBASE_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT_ID || "central-element-323112";
+const FIREBASE_PROJECT_ID =
+  process.env.GOOGLE_CLOUD_PROJECT_ID || "central-element-323112";
 
 function roleNeedsSlack(role) {
   return role !== "shareholder";
@@ -39,7 +40,8 @@ function roleNeedsGithub(role) {
   return role === "admin" || role === "collaborator";
 }
 function roleNeedsM365(role) {
-  const collaboratorM365Enabled = String(process.env.COLLABORATOR_M365_ENABLED || "true") === "true";
+  const collaboratorM365Enabled =
+    String(process.env.COLLABORATOR_M365_ENABLED || "true") === "true";
   return (
     role === "admin" ||
     role === "accounting" ||
@@ -116,7 +118,8 @@ async function main() {
     email,
   });
 
-  const existing = (await db.collection("user_profiles").doc(uid).get()).data() || {};
+  const existing =
+    (await db.collection("user_profiles").doc(uid).get()).data() || {};
   const now = new Date().toISOString();
   const role = "admin";
   const status = "active";
@@ -135,7 +138,9 @@ async function main() {
     microsoft_upn: existing.microsoft_upn ?? email,
     slack_handle: existing.slack_handle ?? localPart,
     gcp_email: existing.gcp_email ?? email,
-    product_slugs: Array.isArray(existing.product_slugs) ? existing.product_slugs : [],
+    product_slugs: Array.isArray(existing.product_slugs)
+      ? existing.product_slugs
+      : [],
     status,
     provisioned_at: existing.provisioned_at || now,
     last_modified: now,
@@ -152,7 +157,13 @@ async function main() {
     source: "user-management-ui",
   });
 
-  console.log(JSON.stringify({ ok: true, uid, email, role, project: FIREBASE_PROJECT_ID }, null, 2));
+  console.log(
+    JSON.stringify(
+      { ok: true, uid, email, role, project: FIREBASE_PROJECT_ID },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((err) => {

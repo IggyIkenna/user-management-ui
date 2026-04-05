@@ -551,9 +551,7 @@ export default function OnboardingRequestsPage() {
                         ))}
                       </span>
                     )}
-                    {req.review_note && (
-                      <span>Note: {req.review_note}</span>
-                    )}
+                    {req.review_note && <span>Note: {req.review_note}</span>}
                   </div>
                 </CardContent>
               </Card>

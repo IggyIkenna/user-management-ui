@@ -29,7 +29,8 @@ for (const envFile of [".env.development", ".env.local", ".env"]) {
   }
 }
 
-const FIREBASE_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT_ID || "central-element-323112";
+const FIREBASE_PROJECT_ID =
+  process.env.GOOGLE_CLOUD_PROJECT_ID || "central-element-323112";
 
 const ROLES = ["viewer", "editor", "admin", "owner"];
 
@@ -61,7 +62,9 @@ async function main() {
   const appRef = db.collection("applications").doc(appId);
   const appDoc = await appRef.get();
   if (!appDoc.exists) {
-    console.error(`Application not registered: ${appId}. Seed apps first (POST /api/v1/apps/seed).`);
+    console.error(
+      `Application not registered: ${appId}. Seed apps first (POST /api/v1/apps/seed).`,
+    );
     process.exit(1);
   }
   const appData = appDoc.data() || {};
@@ -83,7 +86,9 @@ async function main() {
       {
         role,
         capabilities: doc.data().capabilities || [],
-        environments: doc.data().environments?.length ? doc.data().environments : environments,
+        environments: doc.data().environments?.length
+          ? doc.data().environments
+          : environments,
         subject_label: subjectLabel,
         granted_by: "script",
         updated_at: now,
@@ -91,7 +96,13 @@ async function main() {
       { merge: true },
     );
     const updated = await doc.ref.get();
-    console.log(JSON.stringify({ ok: true, updated: true, id: doc.id, ...updated.data() }, null, 2));
+    console.log(
+      JSON.stringify(
+        { ok: true, updated: true, id: doc.id, ...updated.data() },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -109,7 +120,13 @@ async function main() {
     updated_at: now,
   });
   const created = await docRef.get();
-  console.log(JSON.stringify({ ok: true, created: true, id: docRef.id, ...created.data() }, null, 2));
+  console.log(
+    JSON.stringify(
+      { ok: true, created: true, id: docRef.id, ...created.data() },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((err) => {

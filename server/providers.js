@@ -399,7 +399,7 @@ export async function getMicrosoft365LicenseState(profile) {
       available: Boolean(entry.sku),
       assigned: Boolean(
         entry.sku &&
-        assignedSkuIds.has(String(entry.sku.skuId || "").toLowerCase()),
+          assignedSkuIds.has(String(entry.sku.skuId || "").toLowerCase()),
       ),
       skuPartNumber: entry.sku?.skuPartNumber || null,
       skuId: entry.sku?.skuId || null,
