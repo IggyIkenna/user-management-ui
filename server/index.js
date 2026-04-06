@@ -266,6 +266,32 @@ async function resolveUserUid(inputId) {
   return inputId;
 }
 
+async function ensureUserProfile(uid) {
+  const ref = usersCollection().doc(uid);
+  const snap = await ref.get();
+  if (snap.exists) return { ref, profile: snap.data() };
+
+  const fbUser = await auth.getUser(uid);
+  const now = new Date().toISOString();
+  const profile = {
+    id: uid,
+    name: fbUser.displayName || fbUser.email || uid,
+    email: fbUser.email || "",
+    role: fbUser.customClaims?.role || "client",
+    status: fbUser.disabled ? "offboarded" : "active",
+    provisioned_at: null,
+    last_modified: now,
+    created_at: now,
+    services: getDefaultServicesForUser(
+      fbUser.customClaims?.role || "client",
+      fbUser.disabled ? "offboarded" : "active",
+    ),
+    service_synced_at: {},
+  };
+  await ref.set(profile);
+  return { ref, profile };
+}
+
 async function getActorFromRequest(req) {
   const header = String(req.headers.authorization || "");
   const m = /^Bearer\s+(.+)$/i.exec(header);
@@ -1398,13 +1424,8 @@ app.post("/api/v1/users/:id/issue-work-email", async (req, res) => {
     }
 
     const id = await resolveUserUid(req.params.id);
-    const profileRef = usersCollection().doc(id);
-    const snapshot = await profileRef.get();
-    if (!snapshot.exists) {
-      return res.status(404).json({ error: "User profile not found." });
-    }
+    const { ref: profileRef, profile } = await ensureUserProfile(id);
 
-    const profile = snapshot.data() || {};
     const providedLocalPart = String(req.body?.local_part || "")
       .trim()
       .toLowerCase();
@@ -1508,12 +1529,7 @@ app.get("/api/v1/users/:id/microsoft365/licenses", async (req, res) => {
       });
     }
     const id = await resolveUserUid(req.params.id);
-    const profileRef = usersCollection().doc(id);
-    const snapshot = await profileRef.get();
-    if (!snapshot.exists) {
-      return res.status(404).json({ error: "User profile not found." });
-    }
-    const profile = snapshot.data() || {};
+    const { profile } = await ensureUserProfile(id);
     const result = await getMicrosoft365LicenseState({
       ...profile,
       firebase_uid: id,
@@ -1538,12 +1554,7 @@ app.post("/api/v1/users/:id/microsoft365/account-action", async (req, res) => {
       });
     }
     const id = await resolveUserUid(req.params.id);
-    const profileRef = usersCollection().doc(id);
-    const snapshot = await profileRef.get();
-    if (!snapshot.exists) {
-      return res.status(404).json({ error: "User profile not found." });
-    }
-    const profile = snapshot.data() || {};
+    const { ref: profileRef, profile } = await ensureUserProfile(id);
     const action = String(req.body?.action || "").toLowerCase();
     const result = await setMicrosoft365AccountAction(
       { ...profile, firebase_uid: id },
@@ -1623,12 +1634,7 @@ app.post(
       }
 
       const id = await resolveUserUid(req.params.id);
-      const profileRef = usersCollection().doc(id);
-      const snapshot = await profileRef.get();
-      if (!snapshot.exists) {
-        return res.status(404).json({ error: "User profile not found." });
-      }
-      const profile = snapshot.data() || {};
+      const { ref: profileRef, profile } = await ensureUserProfile(id);
       const result = await updateMicrosoft365Licenses(
         { ...profile, firebase_uid: id },
         operation,
